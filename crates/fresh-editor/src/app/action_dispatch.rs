@@ -993,6 +993,8 @@ impl Editor {
             Action::NextBuffer => self.next_buffer(),
             Action::PrevBuffer => self.prev_buffer(),
             Action::SwitchToPreviousTab => self.switch_to_previous_tab(),
+            Action::SwitchToNextTab => self.switch_to_next_tab(),
+            Action::ShowMruTabPopup => self.show_mru_tab_popup(),
             Action::SwitchToTabByName => self.start_switch_to_tab_prompt(),
 
             // Tab scrolling (manual scroll - don't auto-adjust)

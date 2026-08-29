@@ -35,6 +35,21 @@ impl Editor {
     /// Switch to the previously active tab in the current split.
     /// Handles both buffer tabs and group tabs via the focus-history LRU.
     pub(super) fn switch_to_previous_tab(&mut self) {
+        self.switch_to_mru_tab(false);
+    }
+
+    /// Switch to the next tab in the MRU cycle (the one before the
+    /// immediate predecessor). Mirrors `switch_to_previous_tab` but steps
+    /// forward through the focus history.
+    pub(super) fn switch_to_next_tab(&mut self) {
+        self.switch_to_mru_tab(true);
+    }
+
+    /// Shared MRU tab switch. `forward == false` targets the
+    /// most-recently-focused tab (`previous_tab`); `forward == true`
+    /// targets the one before it (`next_tab`). Both buffer and group
+    /// tabs are handled.
+    fn switch_to_mru_tab(&mut self, forward: bool) {
         use crate::view::split::TabTarget;
         let active_split = self
             .windows
@@ -43,16 +58,22 @@ impl Editor {
             .map(|(mgr, _)| mgr)
             .expect("active window must have a populated split layout")
             .active_split();
-        let previous_tab = self
+        let target = self
             .windows
             .get(&self.active_window)
             .and_then(|w| w.buffers.splits())
             .map(|(_, vs)| vs)
             .expect("active window must have a populated split layout")
             .get(&active_split)
-            .and_then(|vs| vs.previous_tab());
+            .and_then(|vs| {
+                if forward {
+                    vs.next_tab()
+                } else {
+                    vs.previous_tab()
+                }
+            });
 
-        match previous_tab {
+        match target {
             Some(TabTarget::Buffer(prev_id)) => {
                 let is_valid = self
                     .windows
@@ -74,6 +95,15 @@ impl Editor {
                     let ph = &mut self.active_window_mut().position_history;
                     ph.record_movement(active_buffer_id, position, anchor);
                     ph.commit_pending_movement();
+                    // Pre-remove the target from the focus history so the
+                    // switch's own push_focus(leaving) yields a clean ring
+                    // (the active tab must not linger as a stale entry).
+                    if let Some(vs) = self
+                        .split_view_states_mut()
+                        .get_mut(&active_split)
+                    {
+                        vs.remove_focus(TabTarget::Buffer(prev_id));
+                    }
                     self.set_active_buffer(prev_id);
                 } else if !is_valid {
                     self.set_status_message(t!("status.previous_tab_closed").to_string());
@@ -81,6 +111,17 @@ impl Editor {
             }
             Some(TabTarget::Group(leaf_id)) => {
                 if self.active_window().grouped_subtrees.contains_key(&leaf_id) {
+                    // `activate_group_tab` does not touch focus_history, so
+                    // record the leaving target and drop the group target
+                    // to keep the ring clean (mirrors set_active_buffer).
+                    if let Some(vs) = self
+                        .split_view_states_mut()
+                        .get_mut(&active_split)
+                    {
+                        let leaving = vs.active_target();
+                        vs.remove_focus(TabTarget::Group(leaf_id));
+                        vs.push_focus(leaving);
+                    }
                     self.activate_group_tab(active_split, leaf_id);
                 } else {
                     self.set_status_message(t!("status.previous_tab_closed").to_string());
@@ -213,6 +254,163 @@ impl Editor {
 
             self.set_active_buffer(buffer_id);
         }
+    }
+
+    /// Switch to a tab target (buffer or group) in the active split.
+    /// Shared by the MRU popup confirm path; records position history and
+    /// keeps the focus-history ring clean exactly like `switch_to_mru_tab`.
+    pub(crate) fn switch_to_tab_target(&mut self, target: crate::view::split::TabTarget) {
+        use crate::view::split::TabTarget;
+        let active_split = self
+            .windows
+            .get(&self.active_window)
+            .and_then(|w| w.buffers.splits())
+            .map(|(mgr, _)| mgr)
+            .expect("active window must have a populated split layout")
+            .active_split();
+
+        match target {
+            TabTarget::Buffer(buffer_id) => {
+                let is_valid = self
+                    .windows
+                    .get(&self.active_window)
+                    .and_then(|w| w.buffers.splits())
+                    .map(|(_, vs)| vs)
+                    .expect("active window must have a populated split layout")
+                    .get(&active_split)
+                    .is_some_and(|vs| vs.has_buffer(buffer_id));
+                if is_valid && buffer_id != self.active_buffer() {
+                    self.active_window_mut()
+                        .position_history
+                        .commit_pending_movement();
+                    let cursors = self.active_cursors();
+                    let position = cursors.primary().position;
+                    let anchor = cursors.primary().anchor;
+                    let active_buffer_id = self.active_buffer();
+                    let ph = &mut self.active_window_mut().position_history;
+                    ph.record_movement(active_buffer_id, position, anchor);
+                    ph.commit_pending_movement();
+                    if let Some(vs) = self.split_view_states_mut().get_mut(&active_split) {
+                        vs.remove_focus(TabTarget::Buffer(buffer_id));
+                    }
+                    self.set_active_buffer(buffer_id);
+                } else if !is_valid {
+                    self.set_status_message(t!("status.previous_tab_closed").to_string());
+                }
+            }
+            TabTarget::Group(leaf_id) => {
+                if self.active_window().grouped_subtrees.contains_key(&leaf_id) {
+                    if let Some(vs) = self.split_view_states_mut().get_mut(&active_split) {
+                        let leaving = vs.active_target();
+                        vs.remove_focus(TabTarget::Group(leaf_id));
+                        vs.push_focus(leaving);
+                    }
+                    self.activate_group_tab(active_split, leaf_id);
+                } else {
+                    self.set_status_message(t!("status.previous_tab_closed").to_string());
+                }
+            }
+        }
+    }
+
+    /// Open the MRU tab picker popup listing recently focused tabs
+    /// (most-recent first), with arrow-key navigation and Enter to switch.
+    pub(super) fn show_mru_tab_popup(&mut self) {
+        use crate::model::event::{
+            PopupContentData, PopupData, PopupKindHint, PopupListItemData, PopupPositionData,
+        };
+        use crate::view::split::TabTarget;
+
+        let active_split = self
+            .windows
+            .get(&self.active_window)
+            .and_then(|w| w.buffers.splits())
+            .map(|(mgr, _)| mgr)
+            .expect("active window must have a populated split layout")
+            .active_split();
+
+        // Snapshot the split's tab state (focus history + open tabs) so we
+        // can build the list without holding a borrow across the popup show.
+        let (focus_history, open_buffers, active_target) = self
+            .windows
+            .get(&self.active_window)
+            .and_then(|w| w.buffers.splits())
+            .map(|(_, vs)| vs)
+            .expect("active window must have a populated split layout")
+            .get(&active_split)
+            .map(|vs| (vs.focus_history.clone(), vs.open_buffers.clone(), vs.active_target()))
+            .unwrap_or_else(|| (Vec::new(), Vec::new(), TabTarget::Buffer(self.active_buffer())));
+
+        // Build the MRU list: most-recent-first from focus_history, then any
+        // remaining open tabs, deduped and filtered to still-valid targets.
+        let mut seen: Vec<TabTarget> = Vec::new();
+        let mut ordered: Vec<TabTarget> = Vec::new();
+        for t in focus_history.iter().rev().chain(open_buffers.iter()) {
+            if seen.contains(t) {
+                continue;
+            }
+            seen.push(*t);
+            ordered.push(*t);
+        }
+
+        let group_names = self.active_window().grouped_subtrees.iter().filter_map(|(leaf, node)| {
+            if let crate::view::split::SplitNode::Grouped { name, .. } = node {
+                Some((*leaf, name.clone()))
+            } else {
+                None
+            }
+        }).collect::<std::collections::HashMap<_, _>>();
+
+        let items: Vec<PopupListItemData> = ordered
+            .into_iter()
+            .filter_map(|t| {
+                let (text, data) = match t {
+                    TabTarget::Buffer(id) => {
+                        let name = self
+                            .active_window()
+                            .buffer_metadata
+                            .get(&id)
+                            .map(|m| m.display_name.clone())
+                            .unwrap_or_else(|| format!("Buffer {:?}", id));
+                        (name, format!("buffer:{}", id.0))
+                    }
+                    TabTarget::Group(leaf) => {
+                        let name = group_names
+                            .get(&leaf)
+                            .cloned()
+                            .unwrap_or_else(|| format!("Group {:?}", leaf));
+                        (name, format!("group:{}", leaf.0.0))
+                    }
+                };
+                let is_current = t == active_target;
+                let detail = if is_current { Some("(current)".to_string()) } else { None };
+                Some(PopupListItemData {
+                    text,
+                    detail,
+                    icon: None,
+                    data: Some(data),
+                })
+            })
+            .collect();
+
+        if items.is_empty() {
+            self.set_status_message(t!("status.no_previous_tab").to_string());
+            return;
+        }
+
+        let popup = PopupData {
+            kind: PopupKindHint::List,
+            title: Some(t!("cmd.show_mru_tab_popup").to_string()),
+            description: None,
+            transient: false,
+            content: PopupContentData::List { items, selected: 0 },
+            position: PopupPositionData::Centered,
+            width: 50,
+            max_height: 15,
+            bordered: true,
+        };
+
+        self.show_popup_with_resolver(popup, crate::view::popup::PopupResolver::MruTab);
     }
 
     /// Handle character insertion in prompt mode.

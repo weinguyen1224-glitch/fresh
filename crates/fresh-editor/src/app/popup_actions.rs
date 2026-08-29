@@ -9,6 +9,23 @@ use crate::primitives::snippet::{expand_snippet, is_snippet};
 use crate::primitives::word_navigation::find_completion_word_start;
 use rust_i18n::t;
 
+/// Parse an MRU popup row's `data` back into a `TabTarget`.
+/// Encodings: `buffer:<id>` and `group:<split_id>`.
+fn parse_mru_tab_target(data: &str) -> Option<crate::view::split::TabTarget> {
+    use crate::view::split::TabTarget;
+    if let Some(rest) = data.strip_prefix("buffer:") {
+        rest.parse::<usize>()
+            .ok()
+            .map(|id| TabTarget::Buffer(crate::model::event::BufferId(id)))
+    } else if let Some(rest) = data.strip_prefix("group:") {
+        rest.parse::<usize>().ok().map(|id| {
+            TabTarget::Group(crate::model::event::LeafId(crate::model::event::SplitId(id)))
+        })
+    } else {
+        None
+    }
+}
+
 /// Result of handling a popup confirmation.
 pub enum PopupConfirmResult {
     /// Popup handled, continue normally
@@ -200,6 +217,22 @@ impl Editor {
                     tracing::warn!("Failed to open config file after save error: {}", e);
                 }
                 PopupConfirmResult::Done
+            }
+
+            Some(PopupResolver::MruTab) => {
+                let data = self
+                    .active_state()
+                    .popups
+                    .top()
+                    .and_then(|p| p.selected_item())
+                    .and_then(|item| item.data.clone());
+                self.hide_popup();
+                if let Some(data) = data {
+                    if let Some(target) = parse_mru_tab_target(&data) {
+                        self.switch_to_tab_target(target);
+                    }
+                }
+                PopupConfirmResult::EarlyReturn
             }
 
             Some(PopupResolver::None) | None => {
@@ -434,6 +467,10 @@ impl Editor {
                 if let Err(e) = self.open_config_file(layer) {
                     tracing::warn!("Failed to open config file after save error: {}", e);
                 }
+            }
+
+            Some(PopupResolver::MruTab) => {
+                self.hide_popup();
             }
 
             Some(PopupResolver::None) | None => {

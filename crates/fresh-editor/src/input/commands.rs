@@ -585,6 +585,20 @@ static COMMAND_DEFS: &[CommandDef] = &[
         custom_contexts: &[],
     },
     CommandDef {
+        name_key: "cmd.switch_to_next_tab",
+        desc_key: "cmd.switch_to_next_tab_desc",
+        action: || Action::SwitchToNextTab,
+        contexts: &[Normal, FileExplorer, Terminal],
+        custom_contexts: &[],
+    },
+    CommandDef {
+        name_key: "cmd.show_mru_tab_popup",
+        desc_key: "cmd.show_mru_tab_popup_desc",
+        action: || Action::ShowMruTabPopup,
+        contexts: &[Normal, FileExplorer, Terminal],
+        custom_contexts: &[],
+    },
+    CommandDef {
         name_key: "cmd.switch_to_tab_by_name",
         desc_key: "cmd.switch_to_tab_by_name_desc",
         action: || Action::SwitchToTabByName,

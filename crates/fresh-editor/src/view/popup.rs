@@ -134,6 +134,10 @@ pub enum PopupResolver {
     SettingsSaveError {
         layer: crate::config_io::ConfigLayer,
     },
+    /// MRU tab picker. Confirm switches to the selected tab target; the
+    /// selected row's `data` encodes the target ("buffer:<id>" or
+    /// "group:<leaf>").
+    MruTab,
 }
 
 /// Content of a popup window

@@ -10,7 +10,6 @@ use super::base::{try_handle_shared, SharedHandleResult};
 use crate::input::handler::{DeferredAction, InputContext, InputResult};
 use crate::view::popup::Popup;
 use crossterm::event::{KeyCode, KeyEvent};
-
 /// Handle input for action popups
 pub fn handle_action_input(
     event: &KeyEvent,
@@ -64,3 +63,5 @@ pub fn handle_action_input(
         _ => InputResult::Consumed,
     }
 }
+
+

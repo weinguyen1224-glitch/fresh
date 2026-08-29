@@ -2211,3 +2211,26 @@ fn test_add_cursors_to_line_ends_keeps_existing_multi_cursors() {
     harness.render().unwrap();
     harness.assert_buffer_content("alpha!\nbeta!\ngamma!");
 }
+
+/// Test that clicking collapses secondary cursors (VSCode/Zed behavior).
+#[test]
+fn test_click_collapses_secondary_cursors() {
+    use crate::common::harness::layout;
+    let mut harness = EditorTestHarness::new(80, 24).unwrap();
+
+    harness.type_text("Line 1\nLine 2\nLine 3").unwrap();
+    harness.render().unwrap();
+
+    // Add two cursors above the primary (primary sits at end of Line 3).
+    harness.editor_mut().add_cursor_above();
+    harness.editor_mut().add_cursor_above();
+    assert_eq!(harness.editor().active_cursors().count(), 3);
+
+    // Click inside the content area (past the gutter, on the first content row).
+    harness
+        .mouse_click(5, layout::CONTENT_START_ROW as u16)
+        .unwrap();
+
+    // Clicking must collapse back to a single cursor.
+    assert_eq!(harness.editor().active_cursors().count(), 1);
+}

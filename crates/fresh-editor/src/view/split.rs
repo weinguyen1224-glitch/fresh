@@ -711,6 +711,21 @@ impl SplitViewState {
         self.focus_history.last().copied()
     }
 
+    /// Get the least-recently focused tab target (without removing it).
+    /// The MRU cycle's forward step: `previous_tab` is the most recent,
+    /// this is the oldest entry in the focus history.
+    pub fn next_tab(&self) -> Option<TabTarget> {
+        self.focus_history.first().copied()
+    }
+
+    /// Remove a specific tab target from the focus history without
+    /// pushing anything. Used before an MRU switch so the target being
+    /// activated is not left as a stale entry (the switch itself re-pushes
+    /// the leaving tab).
+    pub fn remove_focus(&mut self, target: TabTarget) {
+        self.focus_history.retain(|t| *t != target);
+    }
+
     /// Remove a buffer from the focus history (called when buffer is closed)
     pub fn remove_from_history(&mut self, buffer_id: BufferId) {
         self.focus_history

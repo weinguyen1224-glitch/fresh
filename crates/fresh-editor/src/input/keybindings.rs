@@ -589,6 +589,8 @@ pub enum Action {
     NextBuffer,
     PrevBuffer,
     SwitchToPreviousTab,
+    SwitchToNextTab,
+    ShowMruTabPopup,
     SwitchToTabByName,
 
     // Tab scrolling
@@ -1126,6 +1128,8 @@ impl Action {
             "next_buffer" => NextBuffer,
             "prev_buffer" => PrevBuffer,
             "switch_to_previous_tab" => SwitchToPreviousTab,
+            "switch_to_next_tab" => SwitchToNextTab,
+            "show_mru_tab_popup" => ShowMruTabPopup,
             "switch_to_tab_by_name" => SwitchToTabByName,
             "scroll_tabs_left" => ScrollTabsLeft,
             "scroll_tabs_right" => ScrollTabsRight,
@@ -3010,6 +3014,8 @@ impl KeybindingResolver {
             Action::SelectCursorStyle => t!("action.select_cursor_style"),
             Action::SelectLocale => t!("action.select_locale"),
             Action::SwitchToPreviousTab => t!("action.switch_to_previous_tab"),
+            Action::SwitchToNextTab => t!("action.switch_to_next_tab"),
+            Action::ShowMruTabPopup => t!("action.show_mru_tab_popup"),
             Action::SwitchToTabByName => t!("action.switch_to_tab_by_name"),
             Action::OpenTerminal => t!("action.open_terminal"),
             Action::OpenTerminalRight => t!("action.open_terminal_right"),

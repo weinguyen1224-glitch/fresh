@@ -756,6 +756,22 @@
       "when": "normal"
     },
     {
+      "comment": "Normal context - MRU tab switch (Ctrl+Tab most-recent)",
+      "key": "Tab",
+      "modifiers": ["ctrl"],
+      "action": "switch_to_previous_tab",
+      "args": {},
+      "when": "normal"
+    },
+    {
+      "comment": "Normal context - MRU tab picker (Ctrl+Shift+Tab opens the recent-tabs list)",
+      "key": "BackTab",
+      "modifiers": ["ctrl"],
+      "action": "show_mru_tab_popup",
+      "args": {},
+      "when": "normal"
+    },
+    {
       "comment": "Normal context - Buffer navigation",
       "key": "PageUp",
       "modifiers": ["ctrl"],

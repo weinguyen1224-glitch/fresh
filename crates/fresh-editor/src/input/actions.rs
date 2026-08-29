@@ -3331,6 +3331,8 @@ pub fn action_to_events(
         | Action::NextBuffer
         | Action::PrevBuffer
         | Action::SwitchToPreviousTab
+        | Action::SwitchToNextTab
+        | Action::ShowMruTabPopup
         | Action::SwitchToTabByName
         | Action::NavigateBack
         | Action::NavigateForward
