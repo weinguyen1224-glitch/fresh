@@ -1668,6 +1668,13 @@ static COMMAND_DEFS: &[CommandDef] = &[
         contexts: &[Normal],
         custom_contexts: &[],
     },
+    CommandDef {
+        name_key: "cmd.open_agent_panel",
+        desc_key: "cmd.open_agent_panel_desc",
+        action: || Action::OpenAgentPanel,
+        contexts: &[Normal],
+        custom_contexts: &[],
+    },
     // Workspace trust — a single command that opens the trust dialog; the
     // dialog itself is where the level is chosen.
     CommandDef {
@@ -1757,3 +1764,4 @@ pub fn filter_commands(
 
     suggestions
 }
+

@@ -604,6 +604,9 @@ impl Editor {
             Action::OpenTerminalInDock => {
                 self.handle_open_terminal_in_dock()?;
             }
+            Action::OpenAgentPanel => {
+                self.handle_open_agent_panel()?;
+            }
             Action::ToggleLineWrap => {
                 let new_value = !self.config.editor.line_wrap;
                 self.config_mut().editor.line_wrap = new_value;
@@ -2132,6 +2135,145 @@ impl Editor {
         Ok(())
     }
 
+    /// Open the oh-my-pi (omp) agent TUI in the right-side Agent Dock,
+    /// creating the dock split if none exists yet. Mirrors
+    /// `handle_open_terminal_in_dock` but splits at the root along the
+    /// vertical axis (full-height right column) and spawns `omp` directly
+    /// so every tab in the dock is an agent, never a bare shell.
+    fn handle_open_agent_panel(&mut self) -> AnyhowResult<()> {
+        use crate::model::event::SplitDirection;
+        use crate::view::split::SplitRole;
+
+        if let Some(dock_leaf) = self
+            .windows
+            .get(&self.active_window)
+            .and_then(|w| w.buffers.splits())
+            .map(|(mgr, _)| mgr)
+            .expect("active window must have a populated split layout")
+            .find_leaf_by_role(SplitRole::AgentDock)
+        {
+            // Existing dock — focus it and spawn a fresh omp tab there.
+            self.windows
+                .get_mut(&self.active_window)
+                .and_then(|w| w.split_manager_mut())
+                .expect("active window must have a populated split layout")
+                .set_active_split(dock_leaf);
+            self.open_omp_terminal();
+            return Ok(());
+        }
+
+        // No dock yet. Spawn the omp PTY first so we have a real terminal
+        // buffer to seed the new dock leaf with.
+        let Some(terminal_id) = self.spawn_omp_terminal_session() else {
+            return Ok(());
+        };
+        let buffer_id = self.create_terminal_buffer_detached(terminal_id);
+
+        // Split at the root along the vertical axis so the dock spans the
+        // full height to the right of every pre-existing pane (including
+        // the bottom utility dock, which shrinks in width automatically).
+        let new_leaf = self
+            .windows
+            .get_mut(&self.active_window)
+            .and_then(|w| w.split_manager_mut())
+            .expect("active window must have a populated split layout")
+            .split_root_positioned(SplitDirection::Vertical, buffer_id, 0.7, false)
+            .map_err(|e| {
+                self.set_status_message(format!("Failed to create agent dock: {}", e));
+            });
+        let Ok(new_leaf) = new_leaf else {
+            return Ok(());
+        };
+
+        let mut view_state = crate::view::split::SplitViewState::with_buffer(
+            self.terminal_width,
+            self.terminal_height,
+            buffer_id,
+        );
+        view_state.apply_config_defaults(crate::view::split::ViewConfigDefaults {
+            line_numbers: false,
+            highlight_current_line: false,
+            line_wrap: self.active_window().resolve_line_wrap_for_buffer(buffer_id),
+            wrap_indent: self.config.editor.wrap_indent,
+            wrap_column: self
+                .active_window()
+                .resolve_wrap_column_for_buffer(buffer_id),
+            rulers: self.config.editor.rulers.clone(),
+            scroll_offset: 0,
+        });
+        view_state.viewport.line_wrap_enabled = false;
+
+        self.windows
+            .get_mut(&self.active_window)
+            .and_then(|w| w.split_view_states_mut())
+            .expect("active window must have a populated split layout")
+            .insert(new_leaf, view_state);
+        self.windows
+            .get_mut(&self.active_window)
+            .and_then(|w| w.split_manager_mut())
+            .expect("active window must have a populated split layout")
+            .set_leaf_role(new_leaf, Some(SplitRole::AgentDock));
+        self.windows
+            .get_mut(&self.active_window)
+            .and_then(|w| w.split_manager_mut())
+            .expect("active window must have a populated split layout")
+            .set_active_split(new_leaf);
+
+        self.active_window_mut().key_context = crate::input::keybindings::KeyContext::Terminal;
+        self.active_window_mut().resize_visible_terminals();
+
+        let exit_key = self
+            .keybindings
+            .read()
+            .unwrap()
+            .find_keybinding_for_action(
+                "terminal_escape",
+                crate::input::keybindings::KeyContext::Terminal,
+            )
+            .unwrap_or_else(|| "Ctrl+Space".to_string());
+        self.set_status_message(
+            rust_i18n::t!("terminal.opened", id = terminal_id.0, exit_key = exit_key).to_string(),
+        );
+        tracing::info!(
+            "Opened omp {:?} into new agent dock leaf {:?} (buffer {:?})",
+            terminal_id,
+            new_leaf,
+            buffer_id
+        );
+        Ok(())
+    }
+
+    /// Spawn an `omp` PTY session in the active window (command override
+    /// `omp`), used to seed the Agent Dock leaf.
+    fn spawn_omp_terminal_session(&mut self) -> Option<crate::services::terminal::TerminalId> {
+        self.active_window_mut().spawn_terminal_session(
+            None,
+            true,
+            Some(vec!["omp".to_string()]),
+            std::collections::HashMap::new(),
+        )
+    }
+
+    /// Open a fresh `omp` terminal tab in the active split (the Agent Dock
+    /// leaf, already focused by the caller).
+    fn open_omp_terminal(&mut self) {
+        let Some(terminal_id) = self.spawn_omp_terminal_session() else {
+            return;
+        };
+        let split_id = self
+            .windows
+            .get(&self.active_window)
+            .and_then(|w| w.buffers.splits())
+            .map(|(mgr, _)| mgr.active_split())
+            .expect("active window must have a populated split layout");
+        let buffer_id = self
+            .active_window_mut()
+            .create_terminal_buffer_attached(terminal_id, split_id);
+        self.set_active_buffer(buffer_id);
+        self.active_window_mut().key_context = crate::input::keybindings::KeyContext::Terminal;
+        self.active_window_mut().resize_visible_terminals();
+    }
+
     /// Run one of the `prompt_*` actions by re-entering the prompt's own
     /// input handler with the key that means the same thing.
     ///
@@ -2163,3 +2305,4 @@ impl Editor {
         }
     }
 }
+

@@ -3369,6 +3369,7 @@ pub fn action_to_events(
         | Action::ResumeLiveGrep
         | Action::ToggleUtilityDock
         | Action::OpenTerminalInDock
+        | Action::OpenAgentPanel
         | Action::CycleLiveGrepProvider
         | Action::ShowHelp
         | Action::ToggleLineWrap
@@ -6803,3 +6804,4 @@ mod property_tests {
         }
     }
 }
+

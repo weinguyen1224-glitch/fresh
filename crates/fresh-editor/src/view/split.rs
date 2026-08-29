@@ -74,6 +74,11 @@ pub enum SplitRole {
     /// quickfix, and other panel-like utilities all swap into this leaf
     /// instead of spawning new splits.
     UtilityDock,
+    /// The Agent Dock — a full-height right-side column hosting the
+    /// oh-my-pi (omp) agent TUI. Like the Utility Dock it is a
+    /// role-tagged singleton leaf, but it splits at the root along the
+    /// vertical axis so it spans the full height beside the editor.
+    AgentDock,
 }
 
 /// A node in the split tree
@@ -2738,3 +2743,4 @@ mod tests {
         );
     }
 }
+

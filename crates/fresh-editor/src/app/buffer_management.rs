@@ -85,10 +85,18 @@ impl crate::app::window::Window {
             .splits()
             .expect("active window must have a populated split layout");
         let active = mgr.active_split();
-        if mgr.get_label(active.into()).is_none() {
+        let is_editor_leaf = |leaf: LeafId| {
+            mgr.leaf_role(leaf) != Some(crate::view::split::SplitRole::UtilityDock)
+                && mgr.leaf_role(leaf) != Some(crate::view::split::SplitRole::AgentDock)
+        };
+        if is_editor_leaf(active) && mgr.get_label(active.into()).is_none() {
             return active;
         }
-        mgr.find_unlabeled_leaf().unwrap_or(active)
+        mgr.root()
+            .leaf_split_ids()
+            .into_iter()
+            .find(|id| is_editor_leaf(*id) && mgr.get_label((*id).into()).is_none())
+            .unwrap_or(active)
     }
 }
 
@@ -690,3 +698,4 @@ impl Editor {
         false
     }
 }
+

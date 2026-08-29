@@ -1880,6 +1880,14 @@
       "when": "normal"
     },
     {
+      "comment": "Agent Panel — open the oh-my-pi (omp) agent in the right-side dock (mnemonic: Ctrl+, like VSCode/Zed agent panel).",
+      "key": ",",
+      "modifiers": ["ctrl"],
+      "action": "open_agent_panel",
+      "args": {},
+      "when": "normal"
+    },
+    {
       "comment": "Orchestrator dock — toggle keyboard focus between the editor/explorer area and the persistent left session dock (the dog-picture column). Press once to dive into the dock, again to return to the editor — same key both ways (the Zed/Yazelix focus-toggle model). When the dock is hidden it is opened and focused. Mnemonic: 'O' for Orchestrator. Bound per-context rather than globally so it does not shadow the live-grep prompt's Alt+O (toggle whole-word). The 'dock' binding lets you blur back out from inside the focused dock.",
       "key": "o",
       "modifiers": ["alt"],
@@ -1981,3 +1989,4 @@
     }
   ]
 }
+

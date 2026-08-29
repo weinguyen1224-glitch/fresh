@@ -3088,10 +3088,15 @@ impl Window {
             return;
         };
         let active = mgr.active_split();
-        if mgr.leaf_role(active) != Some(SplitRole::UtilityDock) {
+        if mgr.leaf_role(active) != Some(SplitRole::UtilityDock)
+            && mgr.leaf_role(active) != Some(SplitRole::AgentDock)
+        {
             return;
         }
-        let is_editor_leaf = |leaf| mgr.leaf_role(leaf) != Some(SplitRole::UtilityDock);
+        let is_editor_leaf = |leaf| {
+            mgr.leaf_role(leaf) != Some(SplitRole::UtilityDock)
+                && mgr.leaf_role(leaf) != Some(SplitRole::AgentDock)
+        };
         let target = mgr.last_focused_where(is_editor_leaf).or_else(|| {
             mgr.root()
                 .leaf_split_ids()

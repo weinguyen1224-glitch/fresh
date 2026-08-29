@@ -261,6 +261,7 @@
   "action.live_grep_export_quickfix": "Export Live Grep results to Quickfix",
   "action.toggle_utility_dock": "Toggle Utility Dock",
   "action.open_terminal_in_dock": "Open terminal in Utility Dock",
+  "action.open_agent_panel": "Open Agent Panel",
   "action.cycle_live_grep_provider": "Cycle Live Grep provider (git-grep → rg → ag → ack → grep)",
   "cmd.resume_live_grep": "Resume Live Grep",
   "cmd.resume_live_grep_desc": "Reopen Live Grep with the prior query, selection, and cached results — no re-run",
@@ -268,6 +269,8 @@
   "cmd.toggle_utility_dock_desc": "Move keyboard focus to/from the shared bottom dock (diagnostics, search-replace, quickfix, …)",
   "cmd.open_terminal_in_dock": "Open Terminal in Utility Dock",
   "cmd.open_terminal_in_dock_desc": "Open a new terminal inside the shared bottom dock (creates the dock if it doesn't exist)",
+  "cmd.open_agent_panel": "Open Agent Panel",
+  "cmd.open_agent_panel_desc": "Open the oh-my-pi (omp) agent in the right-side dock (creates the dock if it doesn't exist)",
   "cmd.workspace_trust": "Workspace Trust…",
   "cmd.workspace_trust_desc": "Open the workspace-trust dialog to trust, restrict, or block this folder",
   "explorer.loading": "Loading...",
@@ -1693,3 +1696,4 @@
   "terminal.tab_exited": "%{name} (exited)",
   "cli.arg.skill": "Print the guide to driving this editor from a shell. Other guides: --skill=tour, --skill=plugin"
 }
+
