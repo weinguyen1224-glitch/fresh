@@ -610,8 +610,6 @@ impl Editor {
             crate::primitives::display_width::visual_column_of(&state.buffer, target_position)
         });
 
-        // Collapse any secondary cursors before moving the primary cursor,
-        // matching VSCode/Zed click-to-exit-multi-cursor behavior.
         let secondary: Vec<(CursorId, usize, Option<usize>)> = self
             .active_cursors()
             .iter()
