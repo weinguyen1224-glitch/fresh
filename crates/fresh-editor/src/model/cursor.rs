@@ -328,6 +328,11 @@ impl Cursors {
         self.cursors.len()
     }
 
+    /// Next cursor ID that will be allocated (monotonic, never reused)
+    pub fn next_id(&self) -> CursorId {
+        CursorId(self.next_id)
+    }
+
     /// Apply a function to all cursors
     pub fn map<F>(&mut self, mut f: F)
     where
