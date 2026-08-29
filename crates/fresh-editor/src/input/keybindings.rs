@@ -571,6 +571,10 @@ pub enum Action {
     /// Open the oh-my-pi (omp) agent TUI in the right-side Agent Dock
     /// (creates the dock if absent; otherwise opens a new omp tab there).
     OpenAgentPanel,
+    /// Hide (close) the bottom utility dock terminal split.
+    HideUtilityDock,
+    /// Hide (close) the right-side agent dock split.
+    HideAgentPanel,
     /// Switch the Live Grep overlay to the next available registered
     /// search provider (skipping unavailable ones), then re-run the
     /// current query under it. Plumbs through to the
@@ -1121,6 +1125,8 @@ impl Action {
             "toggle_utility_dock" => ToggleUtilityDock,
             "open_terminal_in_dock" => OpenTerminalInDock,
             "open_agent_panel" => OpenAgentPanel,
+            "hide_utility_dock" => HideUtilityDock,
+            "hide_agent_panel" => HideAgentPanel,
             "cycle_live_grep_provider" => CycleLiveGrepProvider,
             "toggle_line_wrap" => ToggleLineWrap,
             "toggle_current_line_highlight" => ToggleCurrentLineHighlight,
@@ -2015,6 +2021,8 @@ impl KeybindingResolver {
                 | Action::ToggleUtilityDock
                 | Action::OpenTerminalInDock
                 | Action::OpenAgentPanel
+                | Action::HideUtilityDock
+                | Action::HideAgentPanel
                 | Action::ToggleDockFocus
                 | Action::OpenSettings
                 | Action::MenuActivate
@@ -2834,6 +2842,8 @@ impl KeybindingResolver {
             Action::ToggleUtilityDock => t!("action.toggle_utility_dock"),
             Action::OpenTerminalInDock => t!("action.open_terminal_in_dock"),
             Action::OpenAgentPanel => t!("action.open_agent_panel"),
+            Action::HideUtilityDock => t!("action.hide_utility_dock"),
+            Action::HideAgentPanel => t!("action.hide_agent_panel"),
             Action::CycleLiveGrepProvider => t!("action.cycle_live_grep_provider"),
             Action::InspectThemeAtCursor => t!("action.inspect_theme_at_cursor"),
             Action::ToggleLineWrap => t!("action.toggle_line_wrap"),

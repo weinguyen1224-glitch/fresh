@@ -262,6 +262,8 @@
   "action.toggle_utility_dock": "Toggle Utility Dock",
   "action.open_terminal_in_dock": "Open terminal in Utility Dock",
   "action.open_agent_panel": "Open Agent Panel",
+  "action.hide_utility_dock": "Hide Utility Dock",
+  "action.hide_agent_panel": "Hide Agent Panel",
   "action.cycle_live_grep_provider": "Cycle Live Grep provider (git-grep → rg → ag → ack → grep)",
   "cmd.resume_live_grep": "Resume Live Grep",
   "cmd.resume_live_grep_desc": "Reopen Live Grep with the prior query, selection, and cached results — no re-run",

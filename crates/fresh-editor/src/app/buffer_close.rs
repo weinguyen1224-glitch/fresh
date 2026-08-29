@@ -674,7 +674,8 @@ impl Editor {
                         lid != split_id && mgr.leaf_role(lid) != Some(SplitRole::UtilityDock) && mgr.leaf_role(lid) != Some(SplitRole::AgentDock)
                     });
                     let dock_present = mgr.find_leaf_by_role(SplitRole::UtilityDock).is_some();
-                    let this_is_dock = mgr.leaf_role(split_id) == Some(SplitRole::UtilityDock);
+                    let this_is_dock = mgr.leaf_role(split_id) == Some(SplitRole::UtilityDock)
+                        || mgr.leaf_role(split_id) == Some(SplitRole::AgentDock);
                     (has_other_editor_splits, dock_present, this_is_dock)
                 })
                 .expect("active window must have a populated split layout");
@@ -1054,7 +1055,8 @@ impl Editor {
                         lid != split_id && mgr.leaf_role(lid) != Some(SplitRole::UtilityDock) && mgr.leaf_role(lid) != Some(SplitRole::AgentDock)
                     });
                     let dock_present = mgr.find_leaf_by_role(SplitRole::UtilityDock).is_some();
-                    let this_is_dock = mgr.leaf_role(split_id) == Some(SplitRole::UtilityDock);
+                    let this_is_dock = mgr.leaf_role(split_id) == Some(SplitRole::UtilityDock)
+                        || mgr.leaf_role(split_id) == Some(SplitRole::AgentDock);
                     (has_other_editor_splits, dock_present, this_is_dock)
                 })
                 .expect("active window must have a populated split layout");

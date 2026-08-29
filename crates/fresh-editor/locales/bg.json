@@ -151,6 +151,8 @@
   "action.open_terminal_below": "Отваряне на терминал отдолу",
   "action.open_terminal_in_dock": "Отваряне на терминал в допълнителния панел",
   "action.open_agent_panel": "Open Agent Panel",
+  "action.hide_utility_dock": "Hide Utility Dock",
+  "action.hide_agent_panel": "Hide Agent Panel",
   "action.open_terminal_right": "Отваряне на терминал отдясно",
   "action.open_update_log": "Показване на лога от актуализацията",
   "action.paste": "Поставяне",

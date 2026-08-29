@@ -607,6 +607,12 @@ impl Editor {
             Action::OpenAgentPanel => {
                 self.handle_open_agent_panel()?;
             }
+            Action::HideUtilityDock => {
+                self.hide_dock(crate::view::split::SplitRole::UtilityDock)?;
+            }
+            Action::HideAgentPanel => {
+                self.hide_dock(crate::view::split::SplitRole::AgentDock)?;
+            }
             Action::ToggleLineWrap => {
                 let new_value = !self.config.editor.line_wrap;
                 self.config_mut().editor.line_wrap = new_value;
@@ -2273,6 +2279,25 @@ impl Editor {
         self.active_window_mut().key_context = crate::input::keybindings::KeyContext::Terminal;
         self.active_window_mut().resize_visible_terminals();
     }
+
+    /// Hide (close) the dock split tagged with `role`, tearing down its
+    /// terminal buffer(s) via the canonical close path. Reopen with the
+    /// existing open bindings (Alt+backtick / Ctrl+,).
+    fn hide_dock(&mut self, role: crate::view::split::SplitRole) -> AnyhowResult<()> {
+        loop {
+            let Some(leaf) = self.split_manager().find_leaf_by_role(role) else {
+                break;
+            };
+            let Some(buffer_id) = self.split_manager().get_buffer_id(leaf.into()) else {
+                break;
+            };
+            if !self.close_tab_in_split(buffer_id, leaf) {
+                break;
+            }
+        }
+        Ok(())
+    }
+
 
     /// Run one of the `prompt_*` actions by re-entering the prompt's own
     /// input handler with the key that means the same thing.

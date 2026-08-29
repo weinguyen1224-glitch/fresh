@@ -3370,6 +3370,8 @@ pub fn action_to_events(
         | Action::ToggleUtilityDock
         | Action::OpenTerminalInDock
         | Action::OpenAgentPanel
+        | Action::HideUtilityDock
+        | Action::HideAgentPanel
         | Action::CycleLiveGrepProvider
         | Action::ShowHelp
         | Action::ToggleLineWrap

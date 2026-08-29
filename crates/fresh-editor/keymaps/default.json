@@ -1888,6 +1888,22 @@
       "when": "normal"
     },
     {
+      "comment": "Hide the bottom utility dock (Ctrl+Shift+~).",
+      "key": "~",
+      "modifiers": ["ctrl"],
+      "action": "hide_utility_dock",
+      "args": {},
+      "when": "normal"
+    },
+    {
+      "comment": "Hide the right-side agent panel (Ctrl+Shift+,).",
+      "key": "<",
+      "modifiers": ["ctrl"],
+      "action": "hide_agent_panel",
+      "args": {},
+      "when": "normal"
+    },
+    {
       "comment": "Orchestrator dock — toggle keyboard focus between the editor/explorer area and the persistent left session dock (the dog-picture column). Press once to dive into the dock, again to return to the editor — same key both ways (the Zed/Yazelix focus-toggle model). When the dock is hidden it is opened and focused. Mnemonic: 'O' for Orchestrator. Bound per-context rather than globally so it does not shadow the live-grep prompt's Alt+O (toggle whole-word). The 'dock' binding lets you blur back out from inside the focused dock.",
       "key": "o",
       "modifiers": ["alt"],
