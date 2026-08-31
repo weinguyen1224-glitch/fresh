@@ -159,7 +159,7 @@ pub enum VtInputEvent {
 /// sporadically drops the ESC KEY_EVENT record from VT mouse sequences.
 /// The reader detects these corrupted batches and discards them.
 pub struct VtInputReader {
-    rx: std::sync::mpsc::Receiver<VtInputEvent>,
+    rx: Option<std::sync::mpsc::Receiver<VtInputEvent>>,
     /// Windows Event handle, signaled by the reader thread when data is queued.
     pub event_handle: *mut c_void,
     _thread: std::thread::JoinHandle<()>,
@@ -187,20 +187,19 @@ impl VtInputReader {
             .expect("failed to spawn VT input reader thread");
 
         Self {
-            rx,
+            rx: Some(rx),
             event_handle,
             _thread: thread,
         }
-    }
 
     /// Try to receive an event with a timeout.
     pub fn poll(&self, timeout: Duration) -> Option<VtInputEvent> {
-        self.rx.recv_timeout(timeout).ok()
+        self.rx.as_ref()?.recv_timeout(timeout).ok()
     }
 
     /// Try to receive an event without blocking.
     pub fn try_recv(&self) -> Option<VtInputEvent> {
-        self.rx.try_recv().ok()
+        self.rx.as_ref()?.try_recv().ok()
     }
 
     /// Background reader loop — runs on dedicated thread.
@@ -338,6 +337,11 @@ impl VtInputReader {
 
 impl Drop for VtInputReader {
     fn drop(&mut self) {
+        // Drop the receiver first so the reader thread's tx.send fails and it exits.
+        // Then join to guarantee the thread is no longer calling SetEvent before
+        // closing the handle (avoids use-after-free / handle-reuse race).
+        self.rx.take();
+        let _ = self._thread.join();
         unsafe { windows_sys::Win32::Foundation::CloseHandle(self.event_handle) };
     }
 }
@@ -486,3 +490,4 @@ mod tests {
         assert_eq!(result, b"[<hello");
     }
 }
+
