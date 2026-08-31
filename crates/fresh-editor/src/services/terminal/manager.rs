@@ -182,6 +182,7 @@ impl TerminalHandle {
         }
     }
 
+
     /// Send `signal` to the terminal's process group. Returns
     /// `Ok(false)` when the terminal has no recorded pid
     /// (Windows, or platforms where portable_pty didn't report

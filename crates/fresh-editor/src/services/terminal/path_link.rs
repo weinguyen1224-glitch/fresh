@@ -452,4 +452,18 @@ mod tests {
         assert_eq!(got.line, Some(34));
         assert_eq!(got.column, Some(12));
     }
+
+    /// The exact `bun run start:dev` / ts-node error line format the user
+    /// reported — `src/...path.ts:line`. Detection must resolve path + line.
+    #[test]
+    fn bun_error_line_format() {
+        let line = "src/modules/field/entities/field.entity.ts:39";
+        for col in [6, 46] {
+            let got = detect_link_at(line, col).unwrap();
+            assert_eq!(got.path, "src/modules/field/entities/field.entity.ts", "col {col}");
+            assert_eq!(got.line, Some(39), "col {col}");
+            assert_eq!(got.column, None, "col {col}");
+            assert_eq!(&line[got.range], "src/modules/field/entities/field.entity.ts:39", "col {col}");
+        }
+    }
 }

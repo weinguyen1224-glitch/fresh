@@ -2419,36 +2419,57 @@ impl KeybindingResolver {
             event.modifiers
         );
 
-        // Check Terminal context bindings first (highest priority for terminal mode)
-        for bindings in [&self.bindings, &self.default_bindings] {
-            if let Some(terminal_bindings) = bindings.get(&KeyContext::Terminal) {
-                if let Some(action) = terminal_bindings.get(&norm) {
+        // Probe every binding source in the shared precedence order (see
+        // `probe_order`): all user bindings before all built-in ones
+        // (issue #2720), and within the built-ins, narrower contexts
+        // before broader ones (issue #2941). Only terminal UI actions
+        // are returned; everything else is forwarded to the terminal PTY.
+        for (source, bind_context) in self.probe_order(&KeyContext::Terminal) {
+            if let Some(context_bindings) = self.single_key_map(source).get(&bind_context) {
+                if let Some(action) = context_bindings.get(&norm) {
                     if Self::is_terminal_ui_action(action) {
-                        tracing::trace!("  -> Found UI action in terminal bindings: {:?}", action);
+                        tracing::trace!(
+                            "  -> Found UI action in {} {} bindings: {:?}",
+                            source.label(),
+                            bind_context.to_when_clause(),
+                            action
+                        );
                         return action.clone();
                     }
                 }
             }
         }
 
-        // Check Global bindings (work in all contexts)
-        for bindings in [&self.bindings, &self.default_bindings] {
-            if let Some(global_bindings) = bindings.get(&KeyContext::Global) {
-                if let Some(action) = global_bindings.get(&norm) {
-                    if Self::is_terminal_ui_action(action) {
-                        tracing::trace!("  -> Found UI action in global bindings: {:?}", action);
-                        return action.clone();
-                    }
+        // Fall back to Normal context bindings. A user binding in Normal
+        // context shadows the default Normal binding for the same key —
+        // even a `noop` override must suppress the default (e.g. Ctrl+Q →
+        // Quit) so the terminal doesn't quit when the user disabled it
+        // (issue #2030).
+        let custom_normal_has_binding = self
+            .bindings
+            .get(&KeyContext::Normal)
+            .and_then(|m| m.get(&norm))
+            .is_some();
+        if let Some(normal_bindings) = self.bindings.get(&KeyContext::Normal) {
+            if let Some(action) = normal_bindings.get(&norm) {
+                if Self::is_terminal_ui_action(action) {
+                    tracing::trace!(
+                        "  -> Found UI action in custom normal bindings: {:?}",
+                        action
+                    );
+                    return action.clone();
                 }
             }
         }
 
-        // Check Normal context bindings (for actions like next_split that are in Normal context)
-        for bindings in [&self.bindings, &self.default_bindings] {
-            if let Some(normal_bindings) = bindings.get(&KeyContext::Normal) {
+        if !custom_normal_has_binding {
+            if let Some(normal_bindings) = self.default_bindings.get(&KeyContext::Normal) {
                 if let Some(action) = normal_bindings.get(&norm) {
                     if Self::is_terminal_ui_action(action) {
-                        tracing::trace!("  -> Found UI action in normal bindings: {:?}", action);
+                        tracing::trace!(
+                            "  -> Found UI action in default normal bindings: {:?}",
+                            action
+                        );
                         return action.clone();
                     }
                 }
@@ -5077,5 +5098,38 @@ mod tests {
             "inheriting-modes membership must survive reload_from_config"
         );
     }
+    #[test]
+    fn test_terminal_ui_resolution_respects_custom_normal_noop_shadow() {
+        // Regression: a user `Ctrl+Q → noop` in Normal context must suppress the
+        // default `Ctrl+Q → Quit` in terminal mode too. resolve_terminal_ui_action
+        // previously lacked the custom_normal_has_binding guard that resolve() has
+        // (issue #2030), so the terminal quit even though the user disabled it.
+        let mut config = Config::default();
+        config.keybindings.push(crate::config::Keybinding {
+            key: "q".to_string(),
+            modifiers: vec!["ctrl".to_string()],
+            keys: Vec::new(),
+            action: "noop".to_string(),
+            args: HashMap::new(),
+            when: Some("normal".to_string()),
+        });
+        let resolver = KeybindingResolver::new(&config);
+
+        let ctrl_q = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL);
+        assert_eq!(
+            resolver.resolve_terminal_ui_action(&ctrl_q),
+            Action::None,
+            "a custom Normal noop must shadow the default Ctrl+Q → Quit in terminal mode"
+        );
+
+        // Sanity: without the override, the default Quit still resolves.
+        let default_resolver = KeybindingResolver::new(&Config::default());
+        assert_eq!(
+            default_resolver.resolve_terminal_ui_action(&ctrl_q),
+            Action::Quit,
+            "default Ctrl+Q must still quit in terminal mode"
+        );
+    }
+
 }
 

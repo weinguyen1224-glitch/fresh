@@ -31,6 +31,9 @@ impl Editor {
         row: u16,
         mouse_event: MouseEvent,
     ) -> Option<AnyhowResult<bool>> {
+        if matches!(mouse_event.kind, MouseEventKind::Down(MouseButton::Left)) {
+            tracing::debug!("term-link: left-down col={} row={} mod={:?}", col, row, mouse_event.modifiers);
+        }
         if !matches!(mouse_event.kind, MouseEventKind::Down(MouseButton::Left))
             || !mouse_event.modifiers.contains(KeyModifiers::CONTROL)
         {
@@ -113,7 +116,7 @@ impl Editor {
         let expanded = expand_tilde(raw);
 
         let candidates: Vec<PathBuf> = if expanded.is_absolute() {
-            vec![expanded]
+            vec![expanded.clone()]
         } else {
             let mut v = Vec::new();
             if let Some(cwd) = term_cwd {
@@ -122,10 +125,57 @@ impl Editor {
             v.push(self.working_dir().join(&expanded));
             v
         };
-
+        tracing::debug!("term-link: resolve raw={:?} term_cwd={:?} candidates={:?}", raw, term_cwd, candidates);
         let fs = &self.authority().filesystem;
-        candidates
-            .into_iter()
+        if let Some(found) = candidates
+            .iter()
             .find(|p| fs.is_file(p).unwrap_or(false))
+        {
+            return Some(found.clone());
+        }
+
+        // A monorepo tool (bun/nest) often prints paths relative to a
+        // workspace subdir (e.g. `apps/backend`) while the shell sits at the
+        // repo root. Search a bounded depth of subdirectories of each base
+        // dir for the relative path so `src/...` resolves to
+        // `apps/backend/src/...`.
+        let mut bases: Vec<PathBuf> = Vec::new();
+        if let Some(cwd) = term_cwd {
+            bases.push(cwd.to_path_buf());
+        }
+        bases.push(self.working_dir().to_path_buf());
+        for base in &bases {
+            if let Some(found) = find_under(base, &expanded, fs.as_ref(), 3) {
+                return Some(found);
+            }
+        }
+        None
     }
+}
+
+/// Depth-limited search for `rel` under `base` (skipping `base` itself, which
+/// the direct candidates already covered). Returns the first existing file.
+fn find_under(
+    base: &Path,
+    rel: &Path,
+    fs: &dyn crate::model::filesystem::FileSystem,
+    max_depth: usize,
+) -> Option<PathBuf> {
+    if max_depth == 0 {
+        return None;
+    }
+    let entries = fs.read_dir(base).ok()?;
+    for entry in entries {
+        if !entry.is_dir() {
+            continue;
+        }
+        let candidate = entry.path.join(rel);
+        if fs.is_file(&candidate).unwrap_or(false) {
+            return Some(candidate);
+        }
+        if let Some(found) = find_under(&entry.path, rel, fs, max_depth - 1) {
+            return Some(found);
+        }
+    }
+    None
 }

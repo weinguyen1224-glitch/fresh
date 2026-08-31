@@ -184,11 +184,13 @@ impl Window {
         let (line, cwd) = {
             let state = handle.state.lock().ok()?;
             let line: String = state.get_line(term_row).iter().map(|c| c.c).collect();
-            let cwd = state.cwd().map(|p| p.to_path_buf());
+            let cwd = handle.current_working_dir();
             (line, cwd)
         };
-
-        let link = crate::services::terminal::path_link::detect_link_at(&line, term_col)?;
+        tracing::debug!("term-link: detect col={} row={} line={:?}", term_col, term_row, line);
+        let link = crate::services::terminal::path_link::detect_link_at(&line, term_col);
+        tracing::debug!("term-link: detect result={:?} cwd={:?}", link, cwd);
+        let link = link?;
         Some((buffer_id, term_row, link, cwd))
     }
 
@@ -259,25 +261,29 @@ impl Window {
 
         let pos = crate::model::buffer_position::byte_to_2d(&state.buffer, byte_pos);
         let line_bytes = state.buffer.get_line(pos.line)?;
-        let line = String::from_utf8_lossy(&line_bytes);
-        let line = line.strip_suffix('\n').unwrap_or(&line);
-        // `pos.column` is a byte offset within the line; convert to a char
-        // column for the (char-indexed) detector.
-        let char_col = line
-            .char_indices()
-            .take_while(|(b, _)| *b < pos.column)
-            .count();
+        let raw = String::from_utf8_lossy(&line_bytes);
+        let raw = raw.strip_suffix('\n').unwrap_or(&raw);
+        // Strip ANSI color codes (bun/nest emit them) so they don't glue onto
+        // the path, and map the click's byte offset to a display-char column
+        // in the stripped line.
+        let mut parser = crate::primitives::ansi::AnsiParser::new();
+        let mut line = String::with_capacity(raw.len());
+        let mut char_col = 0usize;
+        for (b, ch) in raw.char_indices() {
+            if parser.parse_char(ch).is_some() {
+                line.push(ch);
+                if b < pos.column {
+                    char_col += 1;
+                }
+            }
+        }
 
-        let link = crate::services::terminal::path_link::detect_link_at(line, char_col)?;
+        let link = crate::services::terminal::path_link::detect_link_at(&line, char_col)?;
         let cwd = self
             .get_terminal_id(active)
             .and_then(|tid| self.terminal_manager.get(tid))
-            .and_then(|h| {
-                h.state
-                    .lock()
-                    .ok()
-                    .and_then(|s| s.cwd().map(|p| p.to_path_buf()))
-            });
+            .and_then(|h| h.current_working_dir())
+;
 
         Some((active, link, cwd))
     }
