@@ -232,6 +232,17 @@ impl Editor {
                 Some(t!("buffer.opened", name = display_name).to_string());
         }
 
+        // Record the opened file in quick-open's frecency so the empty-query
+        // ranking promotes it to the top (matches VS Code recent-files).
+        if let Some(fp) = self
+            .buffers()
+            .get(&buffer_id)
+            .and_then(|s| s.buffer.file_path())
+        {
+            let rel = fp.strip_prefix(self.working_dir()).unwrap_or(fp);
+            self.quick_open_registry.record_file_access(&rel.to_string_lossy());
+        }
+
         Ok(buffer_id)
     }
 
@@ -1307,3 +1318,4 @@ impl crate::app::window::Window {
         }
     }
 }
+

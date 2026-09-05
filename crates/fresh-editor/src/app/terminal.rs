@@ -2574,6 +2574,7 @@ impl Window {
             split_areas
         {
             let Some(terminal_id) = self.get_terminal_id(*buffer_id) else {
+            tracing::debug!("term-render: split={:?} buffer={:?} rect={:?}", split_id, buffer_id, content_rect);
                 continue;
             };
             // The live PTY grid overlays every split showing a terminal EXCEPT

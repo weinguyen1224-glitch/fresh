@@ -468,6 +468,17 @@ impl FileProvider {
             .unwrap_or(0.0)
     }
 
+    /// (score, last_access) for ranking. `last_access` breaks ties between
+    /// files with equal score so the most-recently-opened ranks first.
+    fn get_frecency_rank(&self, path: &str) -> (f64, std::time::Instant) {
+        self.frecency
+            .read()
+            .ok()
+            .and_then(|m| m.get(path).map(|d| (frecency_score(d), d.last_access)))
+            .unwrap_or((0.0, std::time::Instant::now()))
+    }
+
+
     /// Probe the filesystem directly for files matching `query` as a path
     /// prefix.  This is fast (typically one `read_dir` call) and provides
     /// immediate results even while the full recursive scan is in progress.
@@ -935,9 +946,16 @@ impl QuickOpenProvider for FileProvider {
             if search_query.is_empty() {
                 let mut entries: Vec<_> = files.iter().map(|f| (f, 0i32)).collect();
                 entries.sort_by(|a, b| {
-                    b.0.frecency_score
-                        .partial_cmp(&a.0.frecency_score)
+                    // Use live frecency (not the cached snapshot) so files
+                    // opened since the list was loaded rank to the top.
+                    // Tie-break on last_access so the most-recently-opened
+                    // file wins when scores are equal (e.g. each opened once).
+                    let (a_score, a_at) = self.get_frecency_rank(&a.0.relative_path);
+                    let (b_score, b_at) = self.get_frecency_rank(&b.0.relative_path);
+                    b_score
+                        .partial_cmp(&a_score)
                         .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| b_at.cmp(&a_at))
                 });
                 entries.truncate(max_results);
                 for (f, s) in entries {
@@ -995,7 +1013,6 @@ impl QuickOpenProvider for FileProvider {
 
         // Use the selected suggestion's path if available
         if let Some(path) = suggestion.and_then(|s| s.value.as_deref()) {
-            self.record_access(path);
             return QuickOpenResult::OpenFile {
                 path: path.to_string(),
                 line,
@@ -1005,7 +1022,6 @@ impl QuickOpenProvider for FileProvider {
 
         // Fallback: direct path input with :line:col
         if line.is_some() && !path_part.is_empty() {
-            self.record_access(&path_part);
             return QuickOpenResult::OpenFile {
                 path: path_part,
                 line,
@@ -1614,5 +1630,27 @@ mod tests {
             "foo.rs",
             "results for a different cwd must not overwrite the current cache"
         );
+
+    #[test]
+    fn test_empty_query_ranks_most_recent_first() {
+        let provider = FileProvider::new();
+        // Two files, each opened once -> equal frecency score.
+        provider.record_access("a.rs");
+        provider.record_access("b.rs");
+        // b.rs was opened last; it must rank above a.rs.
+        let files = std::sync::Arc::new(vec![
+            FileEntry { relative_path: "a.rs".to_string(), frecency_score: 0.0 },
+            FileEntry { relative_path: "b.rs".to_string(), frecency_score: 0.0 },
+        ]);
+        provider.set_cache("/proj", files);
+        let ctx = make_test_context("/proj");
+        let sugg = provider.suggestions("", &ctx);
+        assert_eq!(sugg[0].value.as_deref(), Some("b.rs"), "most recent must rank first");
+        assert_eq!(sugg[1].value.as_deref(), Some("a.rs"));
+    }
+
     }
 }
+
+
+

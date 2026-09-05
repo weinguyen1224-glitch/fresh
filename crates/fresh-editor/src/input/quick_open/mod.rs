@@ -267,6 +267,20 @@ impl QuickOpenRegistry {
         }
     }
 
+    /// Record that a file was opened so quick-open's empty-query ranking
+    /// (frecency) promotes it to the top. Called from the editor's file-open
+    /// funnel so files opened via explorer, tab switch, goto-definition, etc.
+    /// rank like files opened through quick-open itself.
+    pub fn record_file_access(&self, path: &str) {
+        for provider in self.providers.values() {
+            if let Some(fp) = provider.as_any().downcast_ref::<FileProvider>() {
+                fp.record_access(path);
+                return;
+            }
+        }
+    }
+
+
     /// Get the provider for a given input
     ///
     /// Returns (provider, query_without_prefix)
@@ -407,3 +421,4 @@ mod tests {
         assert_eq!(query, "main");
     }
 }
+
