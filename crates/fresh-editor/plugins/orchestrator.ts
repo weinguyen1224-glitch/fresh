@@ -1162,20 +1162,15 @@ function renameFolder(id: string, name: string): void {
   }
 }
 
-// ── Per-workspace "last active" day — the dock's within-folder sort key ──
+// ── Per-workspace "last active" timestamp — the dock's within-folder sort key ──
 //
 // Within a folder the dock lists the most-recently-active workspaces first,
-// but at DAY granularity so the order is stable through the day and only
-// reshuffles when a workspace crosses a day boundary (a finer key would
-// re-sort — and, since a changed serialized row forces a full panel
-// teardown/rebuild, flicker — on every render; same rationale as
-// `ageString`). We persist the last-active *day number* keyed by canonical
-// root so the recency order survives restarts: the in-memory `lastOutputAt`
-// / `activatedAt` reset each launch and `createdAt` is stamped at reconcile
-// time, so without persistence every workspace would read "active today"
-// after a relaunch and the order would collapse to first-seen.
+// ordered by wall-clock ms. We persist the last-active *timestamp* keyed by
+// canonical root so the recency order survives restarts: the in-memory
+// `lastOutputAt` / `activatedAt` reset each launch and `createdAt` is stamped
+// at reconcile time, so without persistence every workspace would read
+// "active now" after a relaunch and the order would collapse to first-seen.
 const LAST_ACTIVE_KEY = "orchestrator.dock.last_active";
-const MS_PER_DAY = 86_400_000;
 let dockLastActive: Record<string, number> | null = null;
 
 function loadLastActive(): Record<string, number> {
@@ -1195,40 +1190,32 @@ function saveLastActive(): void {
   editor.setGlobalState(LAST_ACTIVE_KEY, (dockLastActive ?? {}) as unknown as object);
 }
 
-function todayDayNumber(): number {
-  return Math.floor(Date.now() / MS_PER_DAY);
-}
 
-// Record that a session was active "today". Writes through to global state
-// only when the stored day actually advances, so a chatty terminal (this
-// fires on every output batch) persists at most once per session per day
-// rather than thrashing the store on every keystroke.
-function markSessionActiveToday(s: AgentSession): void {
-  // On-disk (discovered) rows have no activity of their own — their recency
-  // is meaningless, so don't record (and they sort oldest, see below).
+// Record the wall-clock ms this session was last active. Writes through to
+// global state on every call — activation/output are infrequent enough that
+// the store isn't thrashed, and ms precision is what the recency sort needs.
+function markSessionActiveNow(s: AgentSession): void {
   if (s.discovered) return;
-  const key = normRoot(s.root);
-  const day = todayDayNumber();
   const store = loadLastActive();
-  if (store[key] === day) return;
-  store[key] = day;
+  store[normRoot(s.root)] = Date.now();
   saveLastActive();
 }
 
-// The most recent day this session was active, at day granularity. Prefer
-// the persisted value — it's the real last-active day, updated on every
-// output / activation — so a workspace last used days ago sorts below one
-// used today even though both are live *now* (`createdAt` is stamped at
-// reconcile time and would otherwise pin every restored session to "today").
-// A session with no persisted day yet (never active this run, no history)
-// falls back to today, so a brand-new workspace still sorts as current. A
-// discovered on-disk row is keyed by the same root as the live session it
-// becomes, so opening it never changes its day — hence never its position.
-function sessionLastActiveDay(s: AgentSession): number {
+// The wall-clock ms this session was last active. Prefer the persisted value
+// — it's the real last-active timestamp, updated on every output / activation
+// — so a workspace last used days ago sorts below one used just now even
+// though both are live *now* (`createdAt` is stamped at reconcile time and
+// would otherwise pin every restored session to the present). A session with
+// no persisted timestamp yet (never active this run, no history) falls back
+// to its live activity, then to `createdAt`, then to now — so a brand-new
+// workspace still sorts as current. A discovered on-disk row is keyed by the
+// same root as the live session it becomes, so opening it never changes its
+// timestamp — hence never its position.
+function sessionLastActiveMs(s: AgentSession): number {
   const stored = loadLastActive()[normRoot(s.root)];
   if (stored !== undefined) return stored;
   const liveMs = Math.max(s.lastOutputAt ?? 0, s.activatedAt ?? 0, s.createdAt ?? 0);
-  return liveMs > 0 ? Math.floor(liveMs / MS_PER_DAY) : todayDayNumber();
+  return liveMs > 0 ? liveMs : Date.now();
 }
 
 // ── Workspace names: manual rename + terminal-tracking auto-name ─────────
@@ -2256,77 +2243,28 @@ function filterSessions(needle: string): number[] {
     });
   }
 
-  // Sort by (current-project-first, project, then a stable identity key)
-  // so an "all" view groups the current project's sessions at the top and
-  // other projects' below.
-  //
-  // Within a project the order is a *stable* identity key, deliberately
-  // NOT the live/discovered state or the numeric id — a row must keep its
-  // place when its session changes state. Opening a discovered on-disk
-  // worktree turns it into a live session (and swaps its synthetic
-  // negative id for a positive window id), but it should stay exactly
-  // where it was instead of jumping into a "live" group and shuffling the
-  // rows under you as you arrow-navigate. The key is:
-  //   1. main checkout first — the project's own checkout (root ===
-  //      projectPath) sits above its linked worktrees. This is stable:
-  //      whether a worktree is discovered or open, its root never equals
-  //      its projectPath, so it never crosses this boundary.
-  //   2. then label, then root — alphabetical within each group.
-  //   3. id only as a final tie-break for two otherwise-identical rows.
-  //
-  // The dock is persistent and switches the active session constantly, so
-  // it must NOT reorder as the active project changes — it pins this
-  // stable order. The modal picker, opened fresh each time, additionally
-  // floats the current project to the top.
+  // Sort by recency (most-recently-active first), then a stable identity
+  // key so a row keeps its place when its session changes state (e.g. a
+  // discovered worktree opening into a live window).
   const isWorktree = (s: AgentSession): number =>
     normRoot(s.root) === normRoot(projectKeyOf(s)) ? 0 : 1;
-  const pinCurrentFirst = !dockMode;
-  const byProjectThenStable = (a: number, b: number): number => {
-    const sa = orchestratorSessions.get(a)!;
-    const sb = orchestratorSessions.get(b)!;
-    const aCur = projectKeyOf(sa) === cur ? 0 : 1;
-    const bCur = projectKeyOf(sb) === cur ? 0 : 1;
-    if (pinCurrentFirst && aCur !== bCur) return aCur - bCur;
-    const ka = projectKeyOf(sa);
-    const kb = projectKeyOf(sb);
-    if (ka !== kb) return ka < kb ? -1 : 1;
-    const wa = isWorktree(sa);
-    const wb = isWorktree(sb);
-    if (wa !== wb) return wa - wb;
-    const la = sa.label.toLowerCase();
-    const lb = sb.label.toLowerCase();
-    if (la !== lb) return la < lb ? -1 : 1;
-    if (sa.root !== sb.root) return sa.root < sb.root ? -1 : 1;
-    return a - b;
-  };
 
   if (!needle) {
-    // The dock orders by recency at DAY granularity: most-recently-active
-    // workspaces first, older ones below. Ties within a day (the common
-    // case) fall back to newest-created-first, then to each session's
-    // permanent first-seen slot — both keys are stable through the day, so
-    // the list holds still as the active window switches or a session's
-    // sub-day fields change, and only reorders when a workspace crosses a
-    // day boundary. Folder grouping (which folder a session sits under, and
-    // the folders' own name order) is applied later in `buildDockTree`; this
-    // only orders sessions *within* a group. The modal picker (opened fresh
-    // each time) keeps the grouped, current-project-first browse order.
-    const comparator = dockMode
-      ? (a: number, b: number) => {
-          const sa = orchestratorSessions.get(a)!;
-          const sb = orchestratorSessions.get(b)!;
-          const da = sessionLastActiveDay(sa);
-          const db = sessionLastActiveDay(sb);
-          if (da !== db) return db - da; // more recent active-day first
-          // Same day (the common case): fall back to the permanent first-seen
-          // slot — the dock's long-standing stable order. Keeping this
-          // *ascending* means within-day order is unchanged from before the
-          // recency feature, so a discovered worktree keeps its position when
-          // it opens and the persistent dock never reshuffles intra-day; only
-          // a genuine cross-day change floats a workspace up.
-          return stableOrderKey(sa) - stableOrderKey(sb);
-        }
-      : byProjectThenStable;
+    // Order by recency: most-recently-active workspaces first, older ones
+    // below. Ties (equal ms) fall back to each session's permanent first-
+    // seen slot — stable, so the list holds still as the active window
+    // switches or a session's sub-day fields change. Folder grouping (which
+    // folder a session sits under, and the folders' own name order) is
+    // applied later in `buildDockTree`; this only orders sessions *within*
+    // a group.
+    const comparator = (a: number, b: number) => {
+      const sa = orchestratorSessions.get(a)!;
+      const sb = orchestratorSessions.get(b)!;
+      const da = sessionLastActiveMs(sa);
+      const db = sessionLastActiveMs(sb);
+      if (da !== db) return db - da; // most-recently-active first
+      return stableOrderKey(sa) - stableOrderKey(sb);
+    };
     const ids = allIds.slice().sort(comparator);
     if (scope === "current") {
       // Keep being-created placeholders visible regardless of scope — they
@@ -4058,15 +3996,8 @@ function openControlRoom(
     dockNodes: [],
     dockKeys: [],
   };
-  // Set `dockMode` BEFORE the initial `filterSessions("")`. The sort
-  // inside `filterSessions` keys off `pinCurrentFirst = !dockMode`: the
-  // dock wants stable lex order, the modal picker wants current-first.
-  // Doing the filter first (when `dockMode` is still its previous /
-  // initial `false` value) made the dock's INITIAL render use current-
-  // first ordering, while every subsequent `refreshOpenDialog`
-  // (active_window_changed, window_created, …) used the stable lex
-  // sort. Switching the active project then visibly reordered the
-  // dock list — precisely what the dock comment forbids.
+  // Set `dockMode` BEFORE the initial `filterSessions("")` so the first
+  // render uses the same recency order as every later refresh.
   openPanel = new FloatingWidgetPanel();
   if (asDock) {
     dockMode = true;
@@ -12191,8 +12122,8 @@ editor.on("active_window_changed", () => {
   if (s) {
     s.activatedAt = Date.now();
     // Switching into a workspace counts as activity for the dock's recency
-    // order (persisted at day granularity).
-    markSessionActiveToday(s);
+    // order (persisted at ms precision).
+    markSessionActiveNow(s);
   }
   refreshOpenDialog();
   // A passive (blurred) dock mirrors the active window, so keep its
@@ -12277,9 +12208,9 @@ editor.on("terminal_output", (payload) => {
     // any non-render reader see a fresh value too.
     s.lastOutputAt = Date.now();
     s.state = "working";
-    // Terminal output is activity — feed the dock's day-granularity recency
-    // order (persists at most once per session per day).
-    markSessionActiveToday(s);
+    // Terminal output is activity — feed the dock's ms-precision recency
+    // order.
+    markSessionActiveNow(s);
     // Adopt any explicit OSC activity signal (OSC 133 / OSC 9;4) from the
     // session's own terminal — authoritative for the working/idle dot. Only
     // the session's agent terminal (when it has one), so a second shell in

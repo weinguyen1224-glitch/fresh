@@ -2262,7 +2262,14 @@ impl Editor {
         // Record the launch command so workspace capture persists the omp
         // session (with its command) and a later launch re-runs it, instead
         // of the dock coming back as a blank shell pane.
-        window.mark_terminal_restorable(terminal_id, Some(vec!["omp".to_string()]), None);
+        // Record the launch command (fresh omp) plus a resume argv that
+        // rejoins the previous session on restore, so the dock comes back
+        // focused into the same conversation instead of a blank shell.
+        window.mark_terminal_restorable(
+            terminal_id,
+            Some(vec!["omp".to_string()]),
+            Some(vec!["omp".to_string(), "--continue".to_string()]),
+        );
         Some(terminal_id)
     }
 
