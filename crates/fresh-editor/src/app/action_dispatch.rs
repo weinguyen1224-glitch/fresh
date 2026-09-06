@@ -2252,12 +2252,18 @@ impl Editor {
     /// Spawn an `omp` PTY session in the active window (command override
     /// `omp`), used to seed the Agent Dock leaf.
     fn spawn_omp_terminal_session(&mut self) -> Option<crate::services::terminal::TerminalId> {
-        self.active_window_mut().spawn_terminal_session(
+        let window = self.active_window_mut();
+        let terminal_id = window.spawn_terminal_session(
             None,
             true,
             Some(vec!["omp".to_string()]),
             std::collections::HashMap::new(),
-        )
+        )?;
+        // Record the launch command so workspace capture persists the omp
+        // session (with its command) and a later launch re-runs it, instead
+        // of the dock coming back as a blank shell pane.
+        window.mark_terminal_restorable(terminal_id, Some(vec!["omp".to_string()]), None);
+        Some(terminal_id)
     }
 
     /// Open a fresh `omp` terminal tab in the active split (the Agent Dock
@@ -2330,4 +2336,5 @@ impl Editor {
         }
     }
 }
+
 

@@ -1325,11 +1325,22 @@ impl crate::app::window::Window {
                 };
 
                 // Create the split for the second child
-                match self
-                    .buffers
-                    .split_manager_mut()
-                    .expect("active window must have a populated split layout")
-                    .split_active(split_direction, second_buffer_id, *ratio)
+                // A dock subtree (AgentDock/UtilityDock) must split at the root
+                // so it spans the full height/width beside the editor, not nest
+                // under the active pane (which would shrink it to half height
+                // and demote it to a plain terminal).
+                let split_result = if get_first_leaf_role(second).is_some() {
+                    self.buffers
+                        .split_manager_mut()
+                        .expect("active window must have a populated split layout")
+                        .split_root_positioned(split_direction, second_buffer_id, *ratio, false)
+                } else {
+                    self.buffers
+                        .split_manager_mut()
+                        .expect("active window must have a populated split layout")
+                        .split_active(split_direction, second_buffer_id, *ratio)
+                };
+                match split_result
                 {
                     Ok(new_leaf_id) => {
                         // Create view state for the new split
@@ -2916,6 +2927,14 @@ impl crate::app::window::Window {
     }
 }
 
+/// Helper: Get the role tag from the first leaf node in a split tree.
+fn get_first_leaf_role(node: &SerializedSplitNode) -> Option<crate::view::split::SplitRole> {
+    match node {
+        SerializedSplitNode::Leaf { role, .. } | SerializedSplitNode::Terminal { role, .. } => *role,
+        SerializedSplitNode::Split { first, .. } => get_first_leaf_role(first),
+    }
+}
+
 /// Helper: Get the buffer ID from the first leaf node in a split tree
 fn get_first_leaf_buffer(
     node: &SerializedSplitNode,
@@ -3373,3 +3392,4 @@ fn get_expanded_dirs(
 
     expanded
 }
+
