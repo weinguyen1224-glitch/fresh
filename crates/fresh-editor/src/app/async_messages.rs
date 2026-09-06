@@ -1608,6 +1608,7 @@ impl Editor {
             | Pc::KillBackgroundProcess { .. }
             | Pc::SpawnProcessWait { .. }
             | Pc::HttpFetch { .. }
+            | Pc::HttpPost { .. }
             | Pc::WatchPath { .. }
             | Pc::UnwatchPath { .. }
             | Pc::SetGlobalState { .. }

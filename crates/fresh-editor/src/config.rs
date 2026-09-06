@@ -1693,6 +1693,12 @@ pub struct EditorConfig {
     #[schemars(extend("x-section" = "Mouse"))]
     pub double_click_time_ms: u64,
 
+    /// Ctrl+Click on a symbol jumps to its definition (LSP go-to-definition),
+    /// like VS Code. Default: true.
+    #[serde(default = "default_true")]
+    #[schemars(extend("x-section" = "Mouse"))]
+    pub ctrl_click_goto_definition: bool,
+
     /// Whether to enable persistent auto-save (save to original file on disk).
     /// When enabled, modified buffers are saved to their original file path
     /// at a configurable interval.
@@ -2044,6 +2050,7 @@ impl Default for EditorConfig {
             mouse_hover_enabled: default_mouse_hover_enabled(),
             mouse_hover_delay_ms: default_mouse_hover_delay(),
             double_click_time_ms: default_double_click_time(),
+            ctrl_click_goto_definition: true,
             auto_revert_poll_interval_ms: default_auto_revert_poll_interval(),
             read_concurrency: default_read_concurrency(),
             file_tree_poll_interval_ms: default_file_tree_poll_interval(),
@@ -9711,3 +9718,4 @@ mod tests {
         }
     }
 }
+

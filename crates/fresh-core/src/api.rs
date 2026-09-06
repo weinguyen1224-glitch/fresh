@@ -1683,6 +1683,13 @@ pub struct EditorStateSnapshot {
     #[serde(default)]
     pub has_active_search: bool,
 
+    /// Whether the LSP completion popup is currently open in the active
+    /// buffer. Lets a plugin coordinate its own inline ghost text with the
+    /// editor's completion popup (e.g. accept the ghost before the popup
+    /// claims Tab).
+    #[serde(default)]
+    pub is_completion_popup_open: bool,
+
     /// Recorded macros for the active session, in register order. Each entry's
     /// `steps` is the macro rendered as `ActionSpec[]` — the same shape
     /// `editor.executeActions` consumes — so a plugin can read a macro and
@@ -1752,6 +1759,7 @@ impl EditorStateSnapshot {
             terminal_width: 0,
             terminal_height: 0,
             has_active_search: false,
+            is_completion_popup_open: false,
             macros: Vec::new(),
         }
     }
@@ -3393,6 +3401,19 @@ pub enum PluginCommand {
         callback_id: JsCallbackId,
     },
 
+    /// POST a JSON body to a URL and return the response body as a string.
+    ///
+    /// The callback resolves with a `SpawnResult`-shaped value: `exit_code`
+    /// is `0` on 2xx, the HTTP status code on non-2xx responses, and `-1`
+    /// on transport errors; `stdout` carries the response body; `stderr`
+    /// carries any error message.
+    HttpPost {
+        url: String,
+        body: String,
+        headers: Vec<(String, String)>,
+        callback_id: JsCallbackId,
+    },
+
     /// Spawn a long-running background process
     /// Unlike SpawnProcess, this returns immediately with a process handle
     /// and provides streaming output via hooks
@@ -3945,6 +3966,10 @@ pub enum PluginCommand {
     /// Cancel the active prompt / overlay, equivalent to the user
     /// pressing Escape. Lets a plugin dismiss a prompt it opened.
     CancelPrompt,
+    /// Dismiss the topmost popup (completion, list, action, …), equivalent
+    /// to the user pressing Escape. Lets a plugin close the LSP completion
+    /// popup so its own inline ghost text can claim Tab.
+    DismissPopup,
     /// Start a prompt (minibuffer) with a custom type identifier
     /// This allows plugins to create interactive prompts
     StartPrompt {
@@ -6899,6 +6924,11 @@ impl PluginApi {
         self.send_command(PluginCommand::SetStatus { message })
     }
 
+    /// Dismiss the topmost popup (completion, list, action, …).
+    pub fn dismiss_popup(&self) -> Result<(), String> {
+        self.send_command(PluginCommand::DismissPopup)
+    }
+
     /// Open a file at a specific line and column (1-indexed)
     /// This is useful for jumping to locations from git grep, LSP definitions, etc.
     pub fn open_file_at_location(
@@ -8434,3 +8464,4 @@ mod create_window_with_terminal_options_tests {
         assert_eq!(back.env, opts.env);
     }
 }
+

@@ -191,6 +191,7 @@ pub struct PartialEditorConfig {
     pub mouse_hover_enabled: Option<bool>,
     pub mouse_hover_delay_ms: Option<u64>,
     pub double_click_time_ms: Option<u64>,
+    pub ctrl_click_goto_definition: Option<bool>,
     pub auto_revert_poll_interval_ms: Option<u64>,
     pub read_concurrency: Option<usize>,
     pub file_tree_poll_interval_ms: Option<u64>,
@@ -301,6 +302,8 @@ impl Merge for PartialEditorConfig {
             .merge_from(&other.mouse_hover_delay_ms);
         self.double_click_time_ms
             .merge_from(&other.double_click_time_ms);
+        self.ctrl_click_goto_definition
+            .merge_from(&other.ctrl_click_goto_definition);
         self.auto_revert_poll_interval_ms
             .merge_from(&other.auto_revert_poll_interval_ms);
         self.read_concurrency.merge_from(&other.read_concurrency);
@@ -657,6 +660,7 @@ impl From<&crate::config::EditorConfig> for PartialEditorConfig {
             mouse_hover_enabled: Some(cfg.mouse_hover_enabled),
             mouse_hover_delay_ms: Some(cfg.mouse_hover_delay_ms),
             double_click_time_ms: Some(cfg.double_click_time_ms),
+            ctrl_click_goto_definition: Some(cfg.ctrl_click_goto_definition),
             auto_revert_poll_interval_ms: Some(cfg.auto_revert_poll_interval_ms),
             read_concurrency: Some(cfg.read_concurrency),
             file_tree_poll_interval_ms: Some(cfg.file_tree_poll_interval_ms),
@@ -805,6 +809,9 @@ impl PartialEditorConfig {
             double_click_time_ms: self
                 .double_click_time_ms
                 .unwrap_or(defaults.double_click_time_ms),
+            ctrl_click_goto_definition: self
+                .ctrl_click_goto_definition
+                .unwrap_or(defaults.ctrl_click_goto_definition),
             auto_revert_poll_interval_ms: self
                 .auto_revert_poll_interval_ms
                 .unwrap_or(defaults.auto_revert_poll_interval_ms),
@@ -1980,3 +1987,4 @@ mod tests {
         assert_eq!(plugins.get("plugin_b").unwrap().enabled, Some(false));
     }
 }
+

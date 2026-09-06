@@ -931,6 +931,9 @@ impl Editor {
             PluginCommand::CancelPrompt => {
                 self.cancel_prompt();
             }
+            PluginCommand::DismissPopup => {
+                self.hide_popup();
+            }
             PluginCommand::StartPrompt {
                 label,
                 prompt_type,
@@ -1319,6 +1322,15 @@ impl Editor {
                 callback_id,
             } => {
                 self.handle_http_fetch(url, target_path, callback_id);
+            }
+
+            PluginCommand::HttpPost {
+                url,
+                body,
+                headers,
+                callback_id,
+            } => {
+                self.handle_http_post(url, body, headers, callback_id);
             }
 
             PluginCommand::SpawnBackgroundProcess {
@@ -5095,6 +5107,51 @@ impl Editor {
         }
     }
 
+    fn handle_http_post(
+        &mut self,
+        url: String,
+        body: String,
+        headers: Vec<(String, String)>,
+        callback_id: fresh_core::api::JsCallbackId,
+    ) {
+        if let (Some(runtime), Some(bridge)) = (&self.tokio_runtime, &self.async_bridge) {
+            let sender = bridge.sender();
+            let process_id = callback_id.as_u64();
+
+            runtime.spawn(async move {
+                let post = tokio::task::spawn_blocking(move || {
+                    crate::services::http::http_post(&url, &body, &headers)
+                })
+                .await;
+
+                let (stdout, stderr, exit_code) = match post {
+                    Ok(Ok((status, response_body))) => {
+                        if (200..300).contains(&status) {
+                            (response_body, String::new(), 0)
+                        } else {
+                            (response_body, format!("HTTP {}", status), i32::from(status))
+                        }
+                    }
+                    Ok(Err(e)) => (String::new(), e, -1),
+                    Err(e) => (String::new(), format!("post task failed: {}", e), -1),
+                };
+
+                #[allow(clippy::let_underscore_must_use)]
+                let _ = sender.send(AsyncMessage::PluginProcessOutput {
+                    process_id,
+                    stdout,
+                    stderr,
+                    exit_code,
+                });
+            });
+        } else {
+            self.plugin_manager
+                .read()
+                .unwrap()
+                .reject_callback(callback_id, "Async runtime not available".to_string());
+        }
+    }
+
     fn handle_kill_background_process(&mut self, process_id: u64) {
         if let Some(handle) = self.background_process_handles.remove(&process_id) {
             handle.abort();
@@ -6815,6 +6872,10 @@ impl Window {
 
         // Update active search state so plugins can query it via hasActiveSearch()
         snapshot.has_active_search = self.search_state.is_some();
+        snapshot.is_completion_popup_open = self
+            .active_state()
+            .popups
+            .is_completion_popup();
 
         shares
     }
@@ -6866,3 +6927,4 @@ impl VariantNameSink {
         std::str::from_utf8(&self.buf[..self.len]).unwrap_or("PluginCommand")
     }
 }
+

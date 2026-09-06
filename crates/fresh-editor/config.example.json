@@ -24,6 +24,7 @@
     "mouse_hover_enabled": true,
     "mouse_hover_delay_ms": 500,
     "double_click_time_ms": 500,
+    "ctrl_click_goto_definition": true,
     "auto_revert_poll_interval_ms": 2000,
     "file_tree_poll_interval_ms": 3000
   },
@@ -1450,3 +1451,4 @@
     ]
   }
 }
+

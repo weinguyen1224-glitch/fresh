@@ -547,6 +547,13 @@ impl Editor {
             return Ok(());
         }
 
+        if modifiers.contains(KeyModifiers::CONTROL) && self.config.editor.ctrl_click_goto_definition {
+            self.active_cursors_mut().primary_mut().position = target_position;
+            self.request_goto_definition()?;
+            return Ok(());
+        }
+
+
         let (primary_cursor_id, old_position, old_anchor, old_sticky_column, deselect_on_move) =
             cursor_snapshot;
 
@@ -655,3 +662,4 @@ impl Editor {
         Ok(())
     }
 }
+

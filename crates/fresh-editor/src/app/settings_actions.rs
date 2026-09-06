@@ -94,6 +94,14 @@ impl Editor {
         #[cfg(windows)]
         let old_mouse_hover = self.config.editor.mouse_hover_enabled;
 
+        // A plain Text field's typed/pasted value lives only in the control's
+        // editor state until `commit_text_edit` flushes it into pending_changes.
+        // Pressing Save while still in edit mode (no Enter/Tab) would otherwise
+        // early-return on `!has_changes()` and silently drop the value.
+        if let Some(ref mut state) = self.settings_state {
+            state.commit_text_edit();
+        }
+
         // Get target layer, new config, and the actual changes made
         let (target_layer, new_config, pending_changes, pending_deletions) = {
             if let Some(ref state) = self.settings_state {

@@ -2742,6 +2742,13 @@ interface EditorAPI {
 	*/
 	hasActiveSearch(): boolean;
 	/**
+	* Returns true when the LSP completion popup is currently open in the
+	* active buffer. Lets a plugin coordinate its own inline ghost text with
+	* the editor's completion popup (e.g. accept the ghost before the popup
+	* claims Tab).
+	*/
+	isCompletionPopupOpen(): boolean;
+	/**
 	* List all open buffers - returns array of BufferInfo objects
 	*/
 	listBuffers(): BufferInfo[];
@@ -2778,6 +2785,10 @@ interface EditorAPI {
 	warn(msg: string): void;
 	error(msg: string): void;
 	setStatus(msg: string): void;
+	/**
+	* Dismiss the topmost popup (completion, list, action, …).
+	*/
+	dismissPopup(): void;
 	copyToClipboard(text: string): void;
 	setClipboard(text: string): void;
 	/**
@@ -4592,7 +4603,7 @@ interface EditorAPI {
 	* The child inherits the **editor's** environment, including `PATH`, so
 	* `git`, `gh` and anything else the user can run from their shell
 	* resolves by bare name — no absolute paths needed.
-	* 
+	*  
 	* `cwd` is the third argument; without it the child inherits the
 	* editor's working directory, which is not necessarily the workspace you
 	* meant.
@@ -4701,6 +4712,17 @@ interface EditorAPI {
 	* don't need `curl`/`wget` on PATH.
 	*/
 	httpFetch(url: string, targetPath: string): ProcessHandle<SpawnResult>;
+	/**
+	* POST a JSON body to a URL and return the response body as a string.
+	* 
+	* Resolves with a `SpawnResult`-shaped value: `exit_code` is `0` on
+	* 2xx, the HTTP status code on non-2xx responses, and `-1` on
+	* transport errors. `stdout` carries the response body; `stderr`
+	* carries any error message.
+	* 
+	* `headers` is an array of `[name, value]` pairs.
+	*/
+	httpPost(url: string, body: string, headers: string[][]): ProcessHandle<SpawnResult>;
 	/**
 	* Wait for a process to complete and get its result (async)
 	*/

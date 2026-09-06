@@ -107,6 +107,51 @@ mod imp {
 
         Ok(status)
     }
+    /// POST a JSON body to a URL and return the response body as a string.
+    ///
+    /// Returns `(status, body)` on success. Non-2xx responses still return
+    /// their body (so callers can read an error payload); transport errors
+    /// are returned as `Err`. The body is capped at `HTTP_FETCH_MAX_BYTES`.
+    pub fn http_post(
+        url: &str,
+        body: &str,
+        headers: &[(String, String)],
+    ) -> Result<(u16, String), String> {
+        let tls_config = ureq::tls::TlsConfig::builder()
+            .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+            .build();
+
+        let agent = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(30)))
+            .http_status_as_error(false)
+            .tls_config(tls_config)
+            .build()
+            .new_agent();
+
+        let mut request = agent
+            .post(url)
+            .header("User-Agent", "fresh-editor");
+        for (name, value) in headers {
+            request = request.header(name, value);
+        }
+
+        let response = request
+            .send(body.as_bytes())
+            .map_err(|e| format!("HTTP request failed: {}", e))?;
+
+        let status = response.status().as_u16();
+        let mut reader = response
+            .into_body()
+            .into_with_config()
+            .limit(HTTP_FETCH_MAX_BYTES)
+            .reader();
+
+        let mut out = String::new();
+        std::io::Read::read_to_string(&mut reader, &mut out)
+            .map_err(|e| format!("failed to read response body: {}", e))?;
+
+        Ok((status, out))
+    }
 }
 
 #[cfg(not(feature = "http"))]
@@ -124,6 +169,14 @@ mod imp {
     pub fn download_to_file(_url: &str, _target: &Path) -> Result<u16, String> {
         Err(DISABLED.to_string())
     }
+
+    pub fn http_post(
+        _url: &str,
+        _body: &str,
+        _headers: &[(String, String)],
+    ) -> Result<(u16, String), String> {
+        Err(DISABLED.to_string())
+    }
 }
 
-pub use imp::{download_to_file, get_release_json, post_telemetry};
+pub use imp::{download_to_file, get_release_json, http_post, post_telemetry};
