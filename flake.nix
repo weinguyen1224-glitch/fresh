@@ -1,3 +1,4 @@
+
 {
   description = "Fresh - A lightweight, fast terminal-based text editor with LSP support and TypeScript plugins";
 

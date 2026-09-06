@@ -1230,6 +1230,18 @@ impl JsEditorApi {
             .unwrap_or(false)
     }
 
+    /// Returns true when the LSP completion popup is currently open in the
+    /// active buffer. Lets a plugin coordinate its own inline ghost text with
+    /// the editor's completion popup (e.g. accept the ghost before the popup
+    /// claims Tab).
+    #[plugin_api]
+    pub fn is_completion_popup_open(&self) -> bool {
+        self.state_snapshot
+            .read()
+            .map(|s| s.is_completion_popup_open)
+            .unwrap_or(false)
+    }
+
     /// List all open buffers - returns array of BufferInfo objects
     #[plugin_api(ts_return = "BufferInfo[]")]
     pub fn list_buffers<'js>(&self, ctx: rquickjs::Ctx<'js>) -> rquickjs::Result<Value<'js>> {
@@ -1334,6 +1346,11 @@ impl JsEditorApi {
         let _ = self
             .command_sender
             .send(PluginCommand::SetStatus { message: msg });
+    }
+
+    /// Dismiss the topmost popup (completion, list, action, …).
+    pub fn dismiss_popup(&self) {
+        let _ = self.command_sender.send(PluginCommand::DismissPopup);
     }
 
     // === Clipboard ===
@@ -7207,6 +7224,46 @@ impl JsEditorApi {
         id
     }
 
+    /// POST a JSON body to a URL and return the response body as a string.
+    ///
+    /// Resolves with a `SpawnResult`-shaped value: `exit_code` is `0` on
+    /// 2xx, the HTTP status code on non-2xx responses, and `-1` on
+    /// transport errors. `stdout` carries the response body; `stderr`
+    /// carries any error message.
+    ///
+    /// `headers` is an array of `[name, value]` pairs.
+    #[plugin_api(async_thenable, js_name = "httpPost", ts_return = "SpawnResult")]
+    #[qjs(rename = "_httpPostStart")]
+    pub fn http_post_start(
+        &self,
+        _ctx: rquickjs::Ctx<'_>,
+        url: String,
+        body: String,
+        headers: Vec<Vec<String>>,
+    ) -> u64 {
+        let id = self.alloc_request_id();
+        tracing::info!(
+            "http_post_start: plugin='{}', url='{}', callback_id={}",
+            self.plugin_name,
+            url,
+            id
+        );
+        let headers: Vec<(String, String)> = headers
+            .into_iter()
+            .filter_map(|pair| {
+                let mut it = pair.into_iter();
+                Some((it.next()?, it.next().unwrap_or_default()))
+            })
+            .collect();
+        let _ = self.command_sender.send(PluginCommand::HttpPost {
+            url,
+            body,
+            headers,
+            callback_id: JsCallbackId::new(id),
+        });
+        id
+    }
+
     /// Wait for a process to complete and get its result (async)
     #[plugin_api(async_promise, js_name = "spawnProcessWait", ts_return = "SpawnResult")]
     #[qjs(rename = "_spawnProcessWaitStart")]
@@ -8447,6 +8504,7 @@ const EDITOR_PROMISE_BOOTSTRAP: &str = r#"
                 editor.sendLspRequest = _wrapAsync("_sendLspRequestStart", "sendLspRequest");
                 editor.spawnBackgroundProcess = _wrapAsyncThenable("_spawnBackgroundProcessStart", "spawnBackgroundProcess");
                 editor.httpFetch = _wrapAsyncThenable("_httpFetchStart", "httpFetch");
+                editor.httpPost = _wrapAsyncThenable("_httpPostStart", "httpPost");
                 editor.spawnProcessWait = _wrapAsync("_spawnProcessWaitStart", "spawnProcessWait");
                 editor.watchPath = _wrapAsync("_watchPathStart", "watchPath");
                 editor.getBufferText = _wrapAsync("_getBufferTextStart", "getBufferText");
@@ -13266,3 +13324,4 @@ mod tests {
         );
     }
 }
+

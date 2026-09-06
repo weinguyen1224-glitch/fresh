@@ -1569,6 +1569,7 @@ mod tests {
             "spawnProcessWait",
             "spawnHostProcess",
             "httpFetch",
+            "httpPost",
             "setAuthority",
             "clearAuthority",
             "setRemoteIndicatorState",
