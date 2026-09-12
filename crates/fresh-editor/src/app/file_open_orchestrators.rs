@@ -87,6 +87,9 @@ impl Editor {
             clamped_position,
             super::navigation::JumpOptions::navigation(),
         );
+
+        let buffer_id = self.active_buffer();
+        self.set_jump_highlight(buffer_id, clamped_position);
     }
 
     /// Open a file (switching to an already-open buffer if any) and jump to the
@@ -1318,4 +1321,5 @@ impl crate::app::window::Window {
         }
     }
 }
+
 

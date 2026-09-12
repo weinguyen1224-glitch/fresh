@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use lsp_types::TextDocumentContentChangeEvent;
 use rust_i18n::t;
 
-use crate::model::event::{BufferId, EventLog};
+use crate::model::event::{BufferId, Event};
 use crate::services::lsp::manager::LspSpawnResult;
 use crate::state::EditorState;
 
@@ -521,8 +521,15 @@ impl Editor {
         new_state.editing_disabled = old_editing_disabled;
         // Line number visibility is in per-split BufferViewState (survives buffer replacement)
 
-        // Replace the current buffer with the new state
+        // Capture the pre-revert buffer snapshot so the revert can be undone.
         let buffer_id = self.active_buffer();
+        let old_snapshot = self
+            .windows
+            .get(&self.active_window)
+            .and_then(|w| w.buffers.get(&buffer_id))
+            .map(|s| s.buffer.snapshot_buffer_state());
+
+        // Replace the current buffer with the new state
         if let Some(state) = self
             .windows
             .get_mut(&self.active_window)
@@ -566,9 +573,28 @@ impl Editor {
             view_state.viewport.left_column = old_left_column;
         }
 
-        // Clear the undo/redo history for this buffer
+        // Record the revert as an undoable BulkEdit so Ctrl+Z restores the
+        // pre-revert content (e.g. an agent's external edit). The old
+        // snapshot is the buffer as it was before this reload; the new
+        // snapshot is the freshly loaded disk state.
+        let new_snapshot = self
+            .windows
+            .get(&self.active_window)
+            .and_then(|w| w.buffers.get(&buffer_id))
+            .map(|s| s.buffer.snapshot_buffer_state());
         if let Some(event_log) = self.active_window_mut().event_logs.get_mut(&buffer_id) {
-            *event_log = EventLog::new();
+            if let (Some(old_snapshot), Some(new_snapshot)) = (old_snapshot, new_snapshot) {
+                event_log.append(Event::BulkEdit {
+                    old_snapshot: Some(old_snapshot),
+                    new_snapshot: Some(new_snapshot),
+                    old_cursors: Vec::new(),
+                    new_cursors: Vec::new(),
+                    description: "Revert to disk".to_string(),
+                    edits: Vec::new(),
+                    displaced_markers: Vec::new(),
+                });
+                event_log.mark_saved();
+            }
         }
 
         // Clear seen_byte_ranges so plugins get notified of all visible lines
@@ -1216,6 +1242,13 @@ impl Editor {
         new_state.editing_disabled = old_editing_disabled;
         // Line number visibility is in per-split BufferViewState (survives buffer replacement)
 
+        // Capture the pre-revert buffer snapshot so the revert can be undone.
+        let old_snapshot = self
+            .windows
+            .get(&self.active_window)
+            .and_then(|w| w.buffers.get(&buffer_id))
+            .map(|s| s.buffer.snapshot_buffer_state());
+
         // Replace the buffer content
         if let Some(state) = self
             .windows
@@ -1240,9 +1273,26 @@ impl Editor {
             }
         }
 
-        // Clear the undo/redo history for this buffer
+        // Record the revert as an undoable BulkEdit so Ctrl+Z restores the
+        // pre-revert content.
+        let new_snapshot = self
+            .windows
+            .get(&self.active_window)
+            .and_then(|w| w.buffers.get(&buffer_id))
+            .map(|s| s.buffer.snapshot_buffer_state());
         if let Some(event_log) = self.active_window_mut().event_logs.get_mut(&buffer_id) {
-            *event_log = EventLog::new();
+            if let (Some(old_snapshot), Some(new_snapshot)) = (old_snapshot, new_snapshot) {
+                event_log.append(Event::BulkEdit {
+                    old_snapshot: Some(old_snapshot),
+                    new_snapshot: Some(new_snapshot),
+                    old_cursors: Vec::new(),
+                    new_cursors: Vec::new(),
+                    description: "Revert to disk".to_string(),
+                    edits: Vec::new(),
+                    displaced_markers: Vec::new(),
+                });
+                event_log.mark_saved();
+            }
         }
 
         // Clear seen_byte_ranges so plugins get notified of all visible lines

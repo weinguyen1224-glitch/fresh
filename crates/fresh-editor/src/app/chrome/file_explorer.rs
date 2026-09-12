@@ -222,6 +222,7 @@ impl Editor {
                                     slot_resolution: &slot_resolution,
                                     tree_indicator_collapsed: &self.config.file_explorer.tree_indicator_collapsed,
                                     tree_indicator_expanded: &self.config.file_explorer.tree_indicator_expanded,
+                                    indent_width: self.config.file_explorer.indent_width,
                                     explorer_area,
                                 },
                             ) {
@@ -672,3 +673,4 @@ impl Editor {
         Ok(())
     }
 }
+

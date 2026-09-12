@@ -3087,3 +3087,4 @@ mod mouse_encoding_tests {
         assert_eq!(cb(TerminalMouseEventKind::ScrollRight), 67 + 32);
     }
 }
+

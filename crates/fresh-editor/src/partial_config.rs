@@ -406,6 +406,7 @@ pub struct PartialFileExplorerConfig {
     pub compact_directories: Option<bool>,
     pub tree_indicator_collapsed: Option<String>,
     pub tree_indicator_expanded: Option<String>,
+    pub indent_width: Option<usize>,
 }
 
 impl Merge for PartialFileExplorerConfig {
@@ -428,6 +429,7 @@ impl Merge for PartialFileExplorerConfig {
             .merge_from(&other.tree_indicator_collapsed);
         self.tree_indicator_expanded
             .merge_from(&other.tree_indicator_expanded);
+        self.indent_width.merge_from(&other.indent_width);
     }
 }
 
@@ -941,6 +943,7 @@ impl From<&FileExplorerConfig> for PartialFileExplorerConfig {
             compact_directories: Some(cfg.compact_directories),
             tree_indicator_collapsed: Some(cfg.tree_indicator_collapsed.clone()),
             tree_indicator_expanded: Some(cfg.tree_indicator_expanded.clone()),
+            indent_width: Some(cfg.indent_width),
         }
     }
 }
@@ -972,6 +975,7 @@ impl PartialFileExplorerConfig {
             tree_indicator_expanded: self
                 .tree_indicator_expanded
                 .unwrap_or_else(|| defaults.tree_indicator_expanded.clone()),
+            indent_width: self.indent_width.unwrap_or(defaults.indent_width),
         }
     }
 }
@@ -1987,4 +1991,5 @@ mod tests {
         assert_eq!(plugins.get("plugin_b").unwrap().enabled, Some(false));
     }
 }
+
 

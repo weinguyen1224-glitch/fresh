@@ -188,6 +188,9 @@ pub fn editor_tick(
     if editor.check_dock_scrollbar_flash_expiry() {
         needs_render = true;
     }
+    if editor.check_jump_highlight_expiry() {
+        needs_render = true;
+    }
     if editor.active_window().check_semantic_highlight_timer() {
         needs_render = true;
     }
@@ -1331,6 +1334,11 @@ pub struct Editor {
     /// ID of the most recent cursor-jump animation, kept so successive jumps
     /// cancel the prior one instead of stacking trail effects.
     pub(crate) cursor_jump_animation: Option<crate::view::animation::AnimationId>,
+    /// Transient background highlight over the symbol just jumped to (goto-
+    /// definition, find-references, goto-line). Auto-cleared on the editor
+    /// tick once its deadline passes, mirroring the dock scrollbar flash.
+    pub(crate) jump_highlight: Option<JumpHighlight>,
+
 
     /// A wheel gesture still playing out, one line at a time. See
     /// [`PendingWheelScroll`].
@@ -1674,6 +1682,17 @@ pub(crate) struct PanelPopupOptionHit {
 /// `FloatingWidgetState::scrollbar_flash_until`).
 pub(crate) const DOCK_SCROLLBAR_FLASH: std::time::Duration = std::time::Duration::from_secs(3);
 
+/// How long the jump-target highlight stays visible before fading.
+pub(crate) const JUMP_HIGHLIGHT_FLASH: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// A transient background highlight over the symbol just jumped to.
+pub(crate) struct JumpHighlight {
+    pub buffer_id: BufferId,
+    pub handle: crate::view::overlay::OverlayHandle,
+    pub until: std::time::Instant,
+}
+
+
 /// A list scrollbar's screen rect + scroll state, captured at draw
 /// time so mouse press/drag can hit-test and drive `ScrollbarMouse`.
 #[derive(Debug, Clone)]
@@ -1705,6 +1724,65 @@ pub struct PendingFileOpen {
 }
 
 impl Editor {
+    /// Place a transient background highlight over the symbol at `position` in
+    /// `buffer_id`, replacing any prior jump highlight. The range is expanded
+    /// to whole-word boundaries so the highlight covers the identifier, not
+    /// just the cursor column.
+    pub(crate) fn set_jump_highlight(&mut self, buffer_id: BufferId, position: usize) {
+        self.clear_jump_highlight();
+
+        let Some(state) = self.buffers_mut().get_mut(&buffer_id) else {
+            return;
+        };
+        let start = state.buffer.prev_word_boundary(position);
+        let end = state.buffer.next_word_boundary(position);
+        if start >= end {
+            return;
+        }
+
+        let handle = state.add_overlay(
+            None,
+            start..end,
+            crate::model::event::OverlayFace::Background {
+                color: (80, 80, 120),
+            },
+            90,
+            None,
+            false,
+            None,
+        );
+        self.jump_highlight = Some(JumpHighlight {
+            buffer_id,
+            handle,
+            until: self.time_source().now() + JUMP_HIGHLIGHT_FLASH,
+        });
+    }
+
+    /// Remove the current jump highlight overlay, if any.
+    pub(crate) fn clear_jump_highlight(&mut self) {
+        let Some(jh) = self.jump_highlight.take() else {
+            return;
+        };
+        if let Some(state) = self.buffers_mut().get_mut(&jh.buffer_id) {
+            state.overlays.remove_by_handle(&jh.handle, &mut state.marker_list);
+        }
+    }
+
+    /// Editor-tick check: clear an expired jump highlight and request a
+    /// repaint. Returns `true` when a redraw is needed.
+    pub(crate) fn check_jump_highlight_expiry(&mut self) -> bool {
+        let expired = self
+            .jump_highlight
+            .as_ref()
+            .is_some_and(|jh| self.time_source().now() >= jh.until);
+        if expired {
+            self.clear_jump_highlight();
+            true
+        } else {
+            false
+        }
+    }
+
     /// Load an ANSI background image from a user-provided path
     fn load_ansi_background(&mut self, input: &str) -> AnyhowResult<()> {
         let trimmed = input.trim();

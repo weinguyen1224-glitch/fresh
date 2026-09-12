@@ -12348,3 +12348,4 @@ editor.addMenuItem({
   checkbox: "dock",
   after: "toggle_file_explorer",
 });
+

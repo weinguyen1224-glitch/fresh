@@ -688,6 +688,7 @@ impl Editor {
             global_popups: crate::view::popup::PopupManager::new(),
             previous_cursor_screen_pos: None,
             cursor_jump_animation: None,
+            jump_highlight: None,
             pending_wheel_scroll: None,
             pending_vb_animations: Vec::new(),
             widget_registry: crate::widgets::WidgetRegistry::new(),

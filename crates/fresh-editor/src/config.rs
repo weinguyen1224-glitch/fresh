@@ -2195,6 +2195,12 @@ pub struct FileExplorerConfig {
     /// Default: "▼"
     #[serde(default = "default_tree_indicator_expanded")]
     pub tree_indicator_expanded: String,
+
+    /// Number of spaces per indent level in the explorer tree. Smaller
+    /// values make the tree more compact (LazyVim-style).
+    /// Default: 2
+    #[serde(default = "default_explorer_indent_width")]
+    pub indent_width: usize,
 }
 
 /// Width configuration for the file explorer.
@@ -2361,6 +2367,10 @@ fn default_tree_indicator_collapsed() -> String {
 
 fn default_tree_indicator_expanded() -> String {
     "▼".to_string()
+}
+
+fn default_explorer_indent_width() -> usize {
+    2
 }
 
 /// Public default used by the workspace state deserializer.
@@ -2626,6 +2636,7 @@ impl Default for FileExplorerConfig {
             compact_directories: true,
             tree_indicator_collapsed: default_tree_indicator_collapsed(),
             tree_indicator_expanded: default_tree_indicator_expanded(),
+            indent_width: default_explorer_indent_width(),
         }
     }
 }
@@ -9718,4 +9729,5 @@ mod tests {
         }
     }
 }
+
 

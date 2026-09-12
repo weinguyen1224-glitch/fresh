@@ -679,3 +679,4 @@ impl super::Editor {
         Some(state.buffer.snap_to_char_boundary(pos))
     }
 }
+

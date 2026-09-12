@@ -4706,3 +4706,4 @@ fn wrap_scroll_geometry(
         .is_some_and(|index| index.is_built_for(&geometry, inputs))
         .then_some(geometry)
 }
+

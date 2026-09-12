@@ -377,6 +377,7 @@ impl Editor {
             // open (#1689).
             self.active_window_mut()
                 .ensure_active_cursor_visible_for_navigation(true);
+            self.set_jump_highlight(buffer_id, position);
         }
 
         let display_path = self

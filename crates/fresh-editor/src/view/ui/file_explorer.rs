@@ -42,6 +42,7 @@ pub(crate) struct TrailingSlotBoundsCtx<'a> {
     pub slot_resolution: &'a ExplorerSlotResolution,
     pub tree_indicator_collapsed: &'a str,
     pub tree_indicator_expanded: &'a str,
+    pub indent_width: usize,
     pub explorer_area: Rect,
 }
 
@@ -231,7 +232,7 @@ impl FileExplorerRenderer {
         // depend on the whole config struct.
         let tree_indicator_collapsed = config.tree_indicator_collapsed.as_str();
         let tree_indicator_expanded = config.tree_indicator_expanded.as_str();
-
+        let indent_width = config.indent_width;
         // Seed the whole explorer rect with its surface keys so border/content
         // rows resolve to the explorer; the selected row is refined below.
         for row in area.y..area.y + area.height {
@@ -285,6 +286,7 @@ impl FileExplorerRenderer {
                     cut_paths,
                     tree_indicator_collapsed,
                     tree_indicator_expanded,
+                    indent_width,
                 ))
             })
             .collect();
@@ -398,6 +400,7 @@ impl FileExplorerRenderer {
         cut_paths: &[PathBuf],
         tree_indicator_collapsed: &str,
         tree_indicator_expanded: &str,
+        indent_width: usize,
     ) -> ListItem<'static> {
         let line = Self::build_node_line(
             view,
@@ -414,6 +417,7 @@ impl FileExplorerRenderer {
             cut_paths,
             tree_indicator_collapsed,
             tree_indicator_expanded,
+            indent_width,
         );
         let row_bg = if (is_selected || is_multi_selected) && is_focused {
             theme.selection_bg
@@ -439,6 +443,7 @@ impl FileExplorerRenderer {
         cut_paths: &[PathBuf],
         tree_indicator_collapsed: &str,
         tree_indicator_expanded: &str,
+        indent_width: usize,
     ) -> Line<'static> {
         let node = view.tree().get_node(node_id).expect("Node should exist");
 
@@ -518,9 +523,9 @@ impl FileExplorerRenderer {
         let chain_prefix_width: usize = chain_prefix_names.iter().map(|s| str_width(s) + 1).sum();
         let name_width = str_width(&node.entry.name);
 
-        let indent_width = indent * 2;
+        let indent_width_px = indent * indent_width;
         let left_side_width =
-            indent_width + indicator_width + leading_slot_width + chain_prefix_width + name_width;
+            indent_width_px + indicator_width + leading_slot_width + chain_prefix_width + name_width;
         let trailing_slot_width = slot_resolution
             .trailing
             .as_ref()
@@ -531,7 +536,7 @@ impl FileExplorerRenderer {
         let total_right_width = trailing_slot_width + error_width;
 
         if indent > 0 {
-            spans.push(Span::raw("  ".repeat(indent)));
+            spans.push(Span::raw(" ".repeat(indent * indent_width)));
         }
 
         if node.is_dir() {
@@ -617,6 +622,7 @@ impl FileExplorerRenderer {
             slot_resolution,
             tree_indicator_collapsed,
             tree_indicator_expanded,
+            indent_width,
             explorer_area,
         } = ctx;
         let trailing_slot = slot_resolution.trailing.as_ref()?;
@@ -638,7 +644,7 @@ impl FileExplorerRenderer {
         let chain_prefix_width: usize = chain_prefix_names.iter().map(|s| str_width(s) + 1).sum();
         let name_width = str_width(&node.entry.name);
         let left_side_width =
-            indent * 2 + indicator_width + leading_slot_width + chain_prefix_width + name_width;
+            indent * indent_width + indicator_width + leading_slot_width + chain_prefix_width + name_width;
         let trailing_slot_width = trailing_slot.width();
         let error_width = if node.is_error() {
             str_width(" [Error]")
@@ -781,6 +787,7 @@ mod tests {
             &[],
             ">",
             "▼",
+            2,
         )
     }
 
@@ -990,6 +997,7 @@ mod tests {
             slot_resolution: &slot_resolution,
             tree_indicator_collapsed: ">",
             tree_indicator_expanded: "▼",
+            indent_width: 2,
             explorer_area: area,
         })
         .expect("modified file should render a trailing slot");
@@ -998,3 +1006,6 @@ mod tests {
         assert_eq!(bounds.1 - bounds.0, 1);
     }
 }
+
+
+

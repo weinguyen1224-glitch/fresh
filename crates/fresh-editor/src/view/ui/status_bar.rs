@@ -1033,11 +1033,10 @@ impl StatusBarRenderer {
     ) {
         let base_style = Style::default().fg(theme.prompt_fg).bg(theme.prompt_bg);
         let dir_style = Style::default()
-            .fg(theme.help_separator_fg)
+            .fg(theme.prompt_fg)
             .bg(theme.prompt_bg);
-        // Style for the [...] ellipsis - use a more visible color
         let ellipsis_style = Style::default()
-            .fg(theme.menu_highlight_fg)
+            .fg(theme.prompt_fg)
             .bg(theme.prompt_bg);
 
         let mut spans = Vec::new();

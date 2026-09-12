@@ -8,7 +8,7 @@ use crate::model::buffer::Buffer;
 use crate::model::marker::MarkerList;
 use crate::view::overlay::{Overlay, OverlayFace, OverlayManager, OverlayNamespace};
 use crate::view::theme::Theme;
-use ratatui::style::Color;
+use ratatui::style::{Color, Style};
 use std::ops::Range;
 
 /// Default rainbow bracket colors (cycle through these based on nesting depth)
@@ -32,7 +32,11 @@ pub fn bracket_colorization_namespace() -> OverlayNamespace {
 }
 
 /// Bracket types we match
-const BRACKET_PAIRS: &[(char, char)] = &[('(', ')'), ('[', ']'), ('{', '}'), ('<', '>')];
+/// Bracket types we match. `<`/`>` are deliberately excluded: in C++ (and
+/// most languages) they are comparison, shift, include, and template
+/// delimiters, not structural brackets, so treating them as pairs corrupts
+/// the nesting stack. VSCode colorizes only `()[]{}` by default.
+const BRACKET_PAIRS: &[(char, char)] = &[('(', ')'), ('[', ']'), ('{', '}')];
 
 /// Maximum number of bytes to scan for bracket matching/nesting depth.
 /// Prevents O(n) scans on huge files from hanging the editor.
@@ -135,6 +139,10 @@ pub struct BracketHighlightOverlay {
     pub match_color: Color,
     /// Last cursor position where we computed brackets
     last_cursor_pos: Option<usize>,
+    /// Buffer version the last cursor-position match was computed for. A
+    /// buffer switch reuses the same byte offset, so the cursor alone is
+    /// not enough to know the pair overlays are stale.
+    last_buffer_version: Option<u64>,
     /// Whether depth-colorization overlays are currently present. Lets a
     /// disabled pass clear them exactly once instead of re-clearing (and
     /// reporting "updated") on every frame.
@@ -173,6 +181,7 @@ impl BracketHighlightOverlay {
             rainbow_colors: DEFAULT_BRACKET_COLORS,
             match_color: Color::Rgb(255, 215, 0), // Gold
             last_cursor_pos: None,
+            last_buffer_version: None,
             colorization_active: false,
             colorization_cache: None,
         }
@@ -241,10 +250,14 @@ impl BracketHighlightOverlay {
             return updated;
         }
 
-        if self.last_cursor_pos == Some(cursor_position) && !colors_changed {
+        if self.last_cursor_pos == Some(cursor_position)
+            && self.last_buffer_version == Some(buffer.version())
+            && !colors_changed
+        {
             return updated;
         }
         self.last_cursor_pos = Some(cursor_position);
+        self.last_buffer_version = Some(buffer.version());
         updated = true;
 
         // Clear existing bracket overlays
@@ -301,6 +314,9 @@ impl BracketHighlightOverlay {
         };
 
         // Create overlay for the bracket at cursor
+        // Both brackets get a background box (VSCode-style): the cursor
+        // bracket and its match are visible at a glance even when they sit
+        // far apart, rather than only sharing a foreground color.
         let cursor_face = OverlayFace::Foreground { color };
         let cursor_overlay = Overlay::with_namespace(
             marker_list,
@@ -313,7 +329,11 @@ impl BracketHighlightOverlay {
 
         // Create overlay for the matching bracket if found
         if let Some(match_pos) = matching_pos {
-            let match_face = OverlayFace::Foreground { color };
+            let match_face = OverlayFace::Style {
+                style: Style::default()
+                    .fg(Color::Rgb(0, 0, 0))
+                    .bg(Color::Rgb(255, 255, 255)),
+            };
             let match_overlay = Overlay::with_namespace(
                 marker_list,
                 match_pos..match_pos + 1,
@@ -487,8 +507,12 @@ impl BracketHighlightOverlay {
             return self.clear_colorization(overlays, marker_list);
         }
 
-        let viewport_size = viewport_end.saturating_sub(viewport_start);
-        let scan_start = viewport_start.saturating_sub(viewport_size);
+        // Scan back far enough to establish the true nesting stack. One
+        // viewport is not enough: a bracket whose opener sits above the
+        // window would start the stack empty, mis-coloring its closer and
+        // every sibling at the same relative depth. Match the cursor-pair
+        // scan bound (MAX_BRACKET_SEARCH_BYTES) so the two agree.
+        let scan_start = viewport_start.saturating_sub(MAX_BRACKET_SEARCH_BYTES);
         let scan_end = viewport_end.min(buffer.len());
         if scan_start >= scan_end {
             return self.clear_colorization(overlays, marker_list);
@@ -826,3 +850,7 @@ mod tests {
         );
     }
 }
+
+
+
+
