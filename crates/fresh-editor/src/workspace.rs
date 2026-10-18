@@ -585,6 +585,17 @@ pub struct ExitedTerminalState {
     /// `(exit N)` suffix on the restored restart indicator.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i32>,
+    /// Set when the process was *stopped on purpose* to reclaim its memory —
+    /// the Orchestrator's park path — rather than having finished on its own.
+    ///
+    /// Restore behaves identically to an ordinary exit (transcript back,
+    /// restart offered, no respawn), so this adds no state machine. It exists
+    /// purely for the label: a parked agent's restart indicator and tab read
+    /// "parked" / "resume", because "exited" would be a lie — the process
+    /// never finished, the editor stopped it. Absent (false) for a terminal
+    /// that genuinely exited, and in workspaces written before this field.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub parked: bool,
 }
 
 /// How to rejoin a terminal's agent conversation on restore. A struct (not a
@@ -1917,3 +1928,4 @@ mod tests {
         );
     }
 }
+

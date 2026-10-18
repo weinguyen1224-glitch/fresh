@@ -47,11 +47,9 @@ pub fn highlight_color(category: HighlightCategory, theme: &Theme) -> Color {
         HighlightCategory::Type => theme.syntax_type,
         HighlightCategory::Variable => theme.syntax_variable,
         HighlightCategory::VariableBuiltin => theme.syntax_variable_builtin,
-        // Diff categories are a background wash; foreground stays at
-        // the editor default so cells keep readable contrast.
-        HighlightCategory::Inserted | HighlightCategory::Deleted | HighlightCategory::Changed => {
-            theme.editor_fg
-        }
+        HighlightCategory::Inserted => theme.diff_add_fg,
+        HighlightCategory::Deleted => theme.diff_remove_fg,
+        HighlightCategory::Changed => theme.diff_modify_fg,
     }
 }
 

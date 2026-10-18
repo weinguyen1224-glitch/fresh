@@ -8036,6 +8036,22 @@ impl JsEditorApi {
             .is_ok()
     }
 
+    /// Stop window `id`'s processes and record its terminals as parked.
+    ///
+    /// Same kill as [`signal_window`](Self::signal_window) with SIGKILL,
+    /// plus the bookkeeping that turns the window's terminal buffers into
+    /// read-only scrollback with a resume offer — so a later workspace
+    /// restore brings back the transcript instead of silently re-running
+    /// the agent's resume argv. Returns `false` only when the command
+    /// channel is closed.
+    pub fn park_window(&self, id: f64) -> bool {
+        self.command_sender
+            .send(PluginCommand::ParkWindow {
+                id: fresh_core::WindowId(id as u64),
+            })
+            .is_ok()
+    }
+
     // === Misc ===
 
     /// Force refresh of line display
@@ -13324,4 +13340,5 @@ mod tests {
         );
     }
 }
+
 

@@ -120,6 +120,12 @@ pub struct ExitedTerminal {
     /// restart can put it back. `None` for an auto-named tab, which re-derives
     /// its name from the reborn process.
     pub title: Option<String>,
+    /// Set when the process was deliberately stopped to reclaim memory (the
+    /// Orchestrator's park path) rather than having exited on its own. The
+    /// restart affordances use it for wording only — a parked agent's
+    /// indicator and tab say "parked" / "resume" instead of "exited",
+    /// since the process never finished. Behaviour is identical.
+    pub parked: bool,
 }
 
 impl ExitedTerminal {
@@ -4619,6 +4625,7 @@ mod exited_terminal_tests {
             ephemeral: true,
             script_access: false,
             title: None,
+            parked: false,
         }
     }
 
@@ -4706,4 +4713,5 @@ fn wrap_scroll_geometry(
         .is_some_and(|index| index.is_built_for(&geometry, inputs))
         .then_some(geometry)
 }
+
 

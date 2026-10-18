@@ -1080,6 +1080,7 @@ impl crate::app::window::Window {
                 // is carried so the restart (which does spawn) mints one.
                 script_access: terminal.script_access,
                 title: terminal.title.clone(),
+                parked: state.parked,
             },
         );
         Some(buffer_id)
@@ -2713,6 +2714,7 @@ impl crate::app::window::Window {
                     .map(|argv| crate::workspace::AgentResume { argv: argv.clone() }),
                 exited: Some(crate::workspace::ExitedTerminalState {
                     exit_code: exited.exit_code,
+                    parked: exited.parked,
                 }),
                 // The pre-exit tab title, not the "(exited)" form the tab is
                 // showing now — restore re-applies the marker itself.
@@ -3392,4 +3394,5 @@ fn get_expanded_dirs(
 
     expanded
 }
+
 

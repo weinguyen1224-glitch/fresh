@@ -11,6 +11,7 @@
 //!   lifecycle management, and view-control commands callable from
 //!   plugin code.
 
+use rust_i18n::t;
 use std::sync::Arc;
 
 use anyhow::Result as AnyhowResult;
@@ -1817,6 +1818,10 @@ impl Editor {
 
             PluginCommand::SignalWindow { id, signal } => {
                 self.handle_signal_window(id, &signal);
+            }
+
+            PluginCommand::ParkWindow { id } => {
+                self.handle_park_window(id);
             }
 
             PluginCommand::RegisterDiffBaseline {
@@ -6292,6 +6297,81 @@ impl Editor {
             }
         }
     }
+
+    /// Stop window `id`'s process groups *and* settle its terminal buffers
+    /// into the read-only "dead terminal" state the exit path would have
+    /// left them in — but recorded as parked rather than exited.
+    ///
+    /// `SignalWindow` alone kills the children and stops there: the
+    /// buffer↔terminal binding survives, so the workspace save writes the
+    /// terminal as live, and the next restore re-runs its resume argv. For
+    /// an agent that means `omp --continue` starting a whole new process —
+    /// the memory the Stop just reclaimed is spent again on every restore,
+    /// which is the loop this exists to break.
+    ///
+    /// The kill still goes through `process_groups.signal_all` (authority
+    /// decides delivery), and each orphaned PTY's own `TerminalExited`
+    /// arrives afterwards as a no-op: its buffer binding is already gone, so
+    /// the handler finds nothing to tear down and only closes the handle
+    /// and fires the plugin hook.
+    fn handle_park_window(&mut self, id: fresh_core::WindowId) {
+        if !self.windows.contains_key(&id) {
+            tracing::warn!("Plugin ParkWindow targeted unknown window {:?}", id);
+            return;
+        }
+        self.handle_signal_window(id, "SIGKILL");
+
+        let bindings: Vec<(BufferId, crate::services::terminal::TerminalId)> = self
+            .windows
+            .get(&id)
+            .map(|w| {
+                w.terminal_buffers
+                    .iter()
+                    .map(|(b, tb)| (*b, tb.terminal_id))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        for (buffer_id, terminal_id) in bindings {
+            let mut record = self.exited_terminal_record(id, terminal_id, None);
+            record.parked = true;
+            let Some(window) = self.windows.get_mut(&id) else {
+                return;
+            };
+            window.terminal_buffers.remove(&buffer_id);
+            if let Some(state) = window.buffers.get_mut(&buffer_id) {
+                state.editing_disabled = true;
+                state.margins.configure_for_line_numbers(false);
+                state.buffer.set_modified(false);
+            }
+            record.title = window
+                .terminal_explicit_titles
+                .contains(&buffer_id)
+                .then(|| window.buffer_metadata.get(&buffer_id))
+                .flatten()
+                .map(|meta| meta.display_name.clone());
+            if let Some(meta) = window.buffer_metadata.get_mut(&buffer_id) {
+                meta.display_name = t!("terminal.tab_parked", name = meta.display_name).to_string();
+            }
+            for leaf in window
+                .buffers
+                .splits()
+                .map(|(_, vs_map)| {
+                    vs_map
+                        .iter()
+                        .filter(|(_, svs)| svs.active_buffer == buffer_id)
+                        .map(|(leaf, _)| *leaf)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+            {
+                window.set_split_terminal_scrollback(leaf, buffer_id, true);
+            }
+            window.sync_terminal_to_buffer(buffer_id);
+            window.exited_terminals.insert(buffer_id, record);
+            window.terminal_manager.close(terminal_id);
+        }
+    }
 }
 
 /// Clamp a plugin-requested `[start, end)` text range to a buffer's live
@@ -6927,4 +7007,5 @@ impl VariantNameSink {
         std::str::from_utf8(&self.buf[..self.len]).unwrap_or("PluginCommand")
     }
 }
+
 

@@ -1696,5 +1696,6 @@
   "status.terminal_restart_shell": "⟳ Redémarrer le terminal",
   "status.terminal_restart_code": "%{label} (code %{code})",
   "terminal.tab_exited": "%{name} (terminé)",
+  "terminal.tab_parked": "%{name} (en pause)",
   "cli.arg.skill": "Affiche le guide pour piloter cet éditeur depuis un shell. Autres guides : --skill=tour, --skill=plugin"
 }

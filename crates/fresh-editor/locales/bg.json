@@ -1580,6 +1580,7 @@
   "terminal.restarted": "Терминал %{id} бе рестартиран",
   "terminal.sent_selection": "Изпратено към терминал %{id}",
   "terminal.tab_exited": "%{name} (прекратен)",
+  "terminal.tab_parked": "%{name} (паркиран)",
   "toggle.buffer_settings_reset": "Настройките на буфера са възстановени към подразбиращите се",
   "toggle.debug_mode_off": "Режимът за отлаждане е ИЗКЛЮЧЕН",
   "toggle.debug_mode_on": "Режимът за отлаждане е ВКЛЮЧЕН - показват се байтови диапазони",

@@ -1696,5 +1696,6 @@
   "status.terminal_restart_shell": "⟳ Перезапустить терминал",
   "status.terminal_restart_code": "%{label} (код %{code})",
   "terminal.tab_exited": "%{name} (завершён)",
+  "terminal.tab_parked": "%{name} (приостановлен)",
   "cli.arg.skill": "Выводит руководство по управлению редактором из оболочки. Другие руководства: --skill=tour, --skill=plugin"
 }

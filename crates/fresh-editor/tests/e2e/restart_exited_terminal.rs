@@ -534,3 +534,124 @@ fn test_terminal_tab_title_survives_an_editor_restart() {
         harness.assert_screen_not_contains("*Terminal");
     }
 }
+
+/// Parking a live agent reclaims its process *and* keeps it reclaimed.
+///
+/// This is the memory loop the Orchestrator's Stop used to leak. Stop killed
+/// the process group with a bare `signalWindow`, which left the terminal
+/// buffer bound to a dead PTY: the workspace saved it as a *live* terminal,
+/// so every later restore re-ran its agent-resume argv (`omp --continue`) and
+/// started a whole new agent process. Stopping a session therefore cost the
+/// same memory it was supposed to free, over and over.
+///
+/// Park settles the terminal into the dead-terminal state (read-only
+/// scrollback, resume offer) while the process is killed, so the saved
+/// workspace records it as dead and restore brings back the transcript with
+/// the resume on offer instead of respawning. The assertions below pin both
+/// halves: the transcript is kept, and the agent is *not* re-launched.
+#[test]
+#[cfg_attr(target_os = "windows", ignore)] // Uses a Unix shell script
+fn test_parking_an_agent_does_not_respawn_it_on_restore() {
+    if !pty_available() {
+        eprintln!("Skipping terminal-restart test: PTY not available");
+        return;
+    }
+
+    let temp_dir = TempDir::new().unwrap();
+    let project_dir = temp_dir.path().join("project");
+    std::fs::create_dir(&project_dir).unwrap();
+    let dir_context = DirectoryContext::for_testing(temp_dir.path());
+
+    // The launch form stays alive at its prompt so there is a real running
+    // process to park; the resume form announces itself, which is how this
+    // test detects a respawn it did not ask for.
+    let agent = write_script(
+        temp_dir.path(),
+        "claude",
+        "#!/bin/sh\n\
+         case \"$1\" in\n\
+           --resume) echo \"AGENT-RESUMED $2\"; exec sleep 30 ;;\n\
+           *)        echo \"AGENT-LAUNCHED $2\"; exec sleep 30 ;;\n\
+         esac\n",
+    );
+
+    let session = |dir_context: &DirectoryContext| {
+        EditorTestHarness::create(
+            120,
+            30,
+            HarnessOptions::new()
+                .with_config(terminal_config())
+                .with_working_dir(project_dir.clone())
+                .with_shared_dir_context(dir_context.clone())
+                .without_empty_plugins_dir(),
+        )
+        .unwrap()
+    };
+
+    // ---- Session 1: the agent runs, is parked, and the workspace is saved
+    // with the terminal already dead. ----
+    {
+        let mut harness = session(&dir_context);
+        harness.editor_mut().set_session_mode(true);
+        spawn_agent_terminal(
+            &mut harness,
+            &[agent.as_str(), "--session-id", "sess-1"],
+            Some(&[agent.as_str(), "--resume", "sess-1"]),
+        );
+        harness.render().unwrap();
+        // A live agent offers no restart — the indicator is what proves the
+        // process is up before we park it.
+        harness
+            .wait_until(|h| h.screen_to_string().contains("AGENT-LAUNCHED sess-1"))
+            .expect("the agent should start");
+        harness.assert_screen_not_contains("⟳ Resume");
+
+        let window_id = harness.editor_mut().active_window_id();
+        harness
+            .editor_mut()
+            .handle_plugin_command(PluginCommand::ParkWindow { id: window_id })
+            .expect("park should be accepted");
+        harness.render().unwrap();
+
+        // Parked, not finished: the tab says so, and the status bar offers a
+        // resume worded for an agent.
+        harness.assert_screen_contains("(parked)");
+        harness
+            .wait_until(|h| h.screen_to_string().contains("⟳ Resume claude"))
+            .expect("a parked agent should offer a resume");
+        harness.shutdown(true).unwrap();
+    }
+
+    // ---- Session 2: reopening must not re-launch the agent. ----
+    {
+        let mut harness = session(&dir_context);
+        assert!(
+            harness.startup(true, &[]).unwrap(),
+            "the workspace should have been restored"
+        );
+        harness.render().unwrap();
+        harness
+            .wait_until(|h| h.screen_to_string().contains("⟳ Resume claude"))
+            .expect("a restored parked agent should still offer a resume");
+
+        // The whole point: no new agent process was started by the restore.
+        harness.assert_screen_not_contains("AGENT-RESUMED");
+        harness.assert_screen_not_contains("AGENT-LAUNCHED");
+
+        // The transcript is not lost either — the pane came back, so the
+        // memory was freed without discarding the conversation.
+        assert_eq!(
+            terminal_tabs(&harness, "claude"),
+            1,
+            "the parked agent keeps its tab\nScreen:\n{}",
+            harness.screen_to_string()
+        );
+
+        // And taking the offer rejoins the conversation, once, on demand.
+        click_restart_indicator(&mut harness, "⟳ Resume claude");
+        harness
+            .wait_until(|h| h.screen_to_string().contains("AGENT-RESUMED sess-1"))
+            .expect("resuming a parked agent should run its resume argv");
+    }
+}
+

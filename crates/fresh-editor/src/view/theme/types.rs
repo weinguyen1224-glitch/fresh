@@ -584,9 +584,17 @@ pub struct EditorColors {
     /// Diff added line background
     #[serde(default = "default_diff_add_bg")]
     pub diff_add_bg: ColorDef,
+    /// Diff added line foreground. When omitted, falls back to
+    /// `editor.fg` so the row reads as a plain background wash.
+    #[serde(default)]
+    pub diff_add_fg: Option<ColorDef>,
     /// Diff removed line background
     #[serde(default = "default_diff_remove_bg")]
     pub diff_remove_bg: ColorDef,
+    /// Diff removed line foreground. When omitted, falls back to
+    /// `editor.fg`.
+    #[serde(default)]
+    pub diff_remove_fg: Option<ColorDef>,
     /// Diff added word-level highlight background (optional override)
     /// When not set, computed by brightening diff_add_bg
     #[serde(default)]
@@ -598,6 +606,10 @@ pub struct EditorColors {
     /// Diff modified line background
     #[serde(default = "default_diff_modify_bg")]
     pub diff_modify_bg: ColorDef,
+    /// Diff modified (hunk header) line foreground. When omitted,
+    /// falls back to `editor.fg`.
+    #[serde(default)]
+    pub diff_modify_fg: Option<ColorDef>,
     /// Fallback fg for cells whose existing fg matches `diff_add_bg`
     /// (e.g. ANSI Green-on-Green). Only applied on collision; other
     /// tokens keep their syntax colour.
@@ -1508,8 +1520,15 @@ pub struct Theme {
 
     // Diff highlighting colors
     pub diff_add_bg: Color,
+    /// Foreground for `+` rows; falls back to `editor_fg` when the
+    /// theme omits `editor.diff_add_fg`.
+    pub diff_add_fg: Color,
     pub diff_remove_bg: Color,
+    /// Foreground for `-` rows; falls back to `editor_fg`.
+    pub diff_remove_fg: Color,
     pub diff_modify_bg: Color,
+    /// Foreground for `@@` rows; falls back to `editor_fg`.
+    pub diff_modify_fg: Color,
     /// Brighter background for inline diff highlighting on added content
     pub diff_add_highlight_bg: Color,
     /// Brighter background for inline diff highlighting on removed content
@@ -1696,7 +1715,7 @@ impl From<ThemeFile> for Theme {
         Self {
             name: file.name,
             editor_bg: file.editor.bg.clone().into(),
-            editor_fg: file.editor.fg.into(),
+            editor_fg: file.editor.fg.clone().into(),
             cursor: file.editor.cursor.into(),
             inactive_cursor: file.editor.inactive_cursor.into(),
             selection_bg: file.editor.selection_bg.clone().into(),
@@ -1752,8 +1771,26 @@ impl From<ThemeFile> for Theme {
             bracket_rainbow_5: file.editor.bracket_rainbow_5.into(),
             bracket_rainbow_6: file.editor.bracket_rainbow_6.into(),
             diff_add_bg: file.editor.diff_add_bg.clone().into(),
+            diff_add_fg: file
+                .editor
+                .diff_add_fg
+                .clone()
+                .map(|c| c.into())
+                .unwrap_or_else(|| file.editor.fg.clone().into()),
             diff_remove_bg: file.editor.diff_remove_bg.clone().into(),
+            diff_remove_fg: file
+                .editor
+                .diff_remove_fg
+                .clone()
+                .map(|c| c.into())
+                .unwrap_or_else(|| file.editor.fg.clone().into()),
             diff_modify_bg: file.editor.diff_modify_bg.into(),
+            diff_modify_fg: file
+                .editor
+                .diff_modify_fg
+                .clone()
+                .map(|c| c.into())
+                .unwrap_or_else(|| file.editor.fg.clone().into()),
             // Use explicit override if provided, otherwise brighten from base
             diff_add_highlight_bg: file
                 .editor
@@ -2003,10 +2040,13 @@ impl From<Theme> for ThemeFile {
                 line_number_fg: theme.line_number_fg.into(),
                 line_number_bg: theme.line_number_bg.into(),
                 diff_add_bg: theme.diff_add_bg.into(),
+                diff_add_fg: Some(theme.diff_add_fg.into()),
                 diff_remove_bg: theme.diff_remove_bg.into(),
+                diff_remove_fg: Some(theme.diff_remove_fg.into()),
                 diff_add_highlight_bg: Some(theme.diff_add_highlight_bg.into()),
                 diff_remove_highlight_bg: Some(theme.diff_remove_highlight_bg.into()),
                 diff_modify_bg: theme.diff_modify_bg.into(),
+                diff_modify_fg: Some(theme.diff_modify_fg.into()),
                 diff_add_collision_fg: theme.diff_add_collision_fg.map(|c| c.into()),
                 diff_remove_collision_fg: theme.diff_remove_collision_fg.map(|c| c.into()),
                 diff_modify_collision_fg: theme.diff_modify_collision_fg.map(|c| c.into()),
@@ -2503,11 +2543,14 @@ theme_color_keys! {
         "current_line_bg" => color current_line_bg,
         "cursor" => color cursor,
         "diff_add_bg" => color diff_add_bg,
+        "diff_add_fg" => color diff_add_fg,
         "diff_add_collision_fg" => opt diff_add_collision_fg,
         "diff_add_highlight_bg" => color diff_add_highlight_bg,
         "diff_modify_bg" => color diff_modify_bg,
+        "diff_modify_fg" => color diff_modify_fg,
         "diff_modify_collision_fg" => opt diff_modify_collision_fg,
         "diff_remove_bg" => color diff_remove_bg,
+        "diff_remove_fg" => color diff_remove_fg,
         "diff_remove_collision_fg" => opt diff_remove_collision_fg,
         "diff_remove_highlight_bg" => color diff_remove_highlight_bg,
         "fg" => color editor_fg,

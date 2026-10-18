@@ -61,11 +61,13 @@
           60,
           35
         ],
+        "diff_add_fg": null,
         "diff_remove_bg": [
           70,
           35,
           35
         ],
+        "diff_remove_fg": null,
         "diff_add_highlight_bg": null,
         "diff_remove_highlight_bg": null,
         "diff_modify_bg": [
@@ -73,6 +75,7 @@
           38,
           30
         ],
+        "diff_modify_fg": null,
         "diff_add_collision_fg": null,
         "diff_remove_collision_fg": null,
         "diff_modify_collision_fg": null,
@@ -620,6 +623,18 @@
             35
           ]
         },
+        "diff_add_fg": {
+          "description": "Diff added line foreground. When omitted, falls back to\n`editor.fg` so the row reads as a plain background wash.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorDef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "diff_remove_bg": {
           "description": "Diff removed line background",
           "$ref": "#/$defs/ColorDef",
@@ -628,6 +643,18 @@
             35,
             35
           ]
+        },
+        "diff_remove_fg": {
+          "description": "Diff removed line foreground. When omitted, falls back to\n`editor.fg`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorDef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "diff_add_highlight_bg": {
           "description": "Diff added word-level highlight background (optional override)\nWhen not set, computed by brightening diff_add_bg",
@@ -661,6 +688,18 @@
             38,
             30
           ]
+        },
+        "diff_modify_fg": {
+          "description": "Diff modified (hunk header) line foreground. When omitted,\nfalls back to `editor.fg`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColorDef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "diff_add_collision_fg": {
           "description": "Fallback fg for cells whose existing fg matches `diff_add_bg`\n(e.g. ANSI Green-on-Green). Only applied on collision; other\ntokens keep their syntax colour.",

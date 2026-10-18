@@ -134,12 +134,9 @@ pub fn highlight_color(category: HighlightCategory, theme: &crate::view::theme::
         HighlightCategory::Type => theme.syntax_type,
         HighlightCategory::Variable => theme.syntax_variable,
         HighlightCategory::VariableBuiltin => theme.syntax_variable_builtin,
-        // Diff categories don't have a dedicated fg — they're a bg
-        // wash on top of the buffer's default fg. Return the editor
-        // foreground so cells keep readable contrast.
-        HighlightCategory::Inserted | HighlightCategory::Deleted | HighlightCategory::Changed => {
-            theme.editor_fg
-        }
+        HighlightCategory::Inserted => theme.diff_add_fg,
+        HighlightCategory::Deleted => theme.diff_remove_fg,
+        HighlightCategory::Changed => theme.diff_modify_fg,
     }
 }
 

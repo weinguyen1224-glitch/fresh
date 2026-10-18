@@ -3207,11 +3207,13 @@ impl Editor {
             return;
         };
 
-        // Lazy materialization: a previewed session whose workspace
-        // hasn't been restored yet gets restored on its first preview
-        // frame, so the embed paints real content. No-op once
-        // materialized (cleared from `materialize_pending`).
-        self.materialize_window(sid);
+        // Deliberately NOT materializing here. A preview is a hover/overlay
+        // glance, not a dive: restoring the workspace would spawn its saved
+        // terminals, and an agent terminal's resume argv (`omp --continue`)
+        // would launch a whole new agent process just because the user
+        // hovered the dock. An unmaterialized window paints its empty seed
+        // (see `build_fresh_layout_if_needed`); the dive path
+        // (`set_active_window`) is the one that materializes.
 
         // Terminal grid → buffer text "sync" was previously a
         // multi-step append/reload/truncate dance that mutated the
@@ -6148,3 +6150,4 @@ fn byte_to_screen_col(text: &str, target_byte: usize) -> usize {
     }
     col
 }
+

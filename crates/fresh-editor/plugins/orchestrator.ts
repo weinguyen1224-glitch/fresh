@@ -776,6 +776,9 @@ let dockBlurred = false;
 // Monotonic token so a rapid run of ↑/↓ only commits the *last*
 // selection after the debounce window (30ms) — see `scheduleDockSwitch`.
 let dockSwitchToken = 0;
+
+// Last active session id, so we can stop its OMP process on switch-away.
+let previousActiveSessionId: number | null = null;
 // Right-click context menu for a dock session row. At `stage: "menu"`
 // it's an unobtrusive content-sized popup anchored at the click (no
 // background dim) offering Visit / Archive / Delete against one session.
@@ -5465,25 +5468,35 @@ function toggleDock(): void {
 
 registerHandler("orchestrator_dock_toggle", toggleDock);
 
-// Stop every process one session owns. Sends SIGTERM first via the
-// host's `signalWindow` (which fans out through the window's
-// process-group tracker), then follows up with SIGKILL after a short
-// grace period so ill-behaved agents that ignore SIGTERM still get
-// reaped. The session record stays put — Stop only kills processes,
-// it doesn't touch the worktree or the editor session. Returns false
-// for ids it can't stop (base session, discovered worktrees with no
-// live window).
+// Stop every process one session owns and settle its terminals into the
+// host's parked state — read-only scrollback, resume offer, and a workspace
+// save that records the terminal as dead. The session record stays put:
+// Stop only reclaims the agent's memory, it doesn't touch the worktree or
+// the editor session. Diving back in re-runs the agent's resume argv
+// (`omp --continue`), so the conversation is one click away.
+//
+// Park rather than plain `signalWindow` is the whole point: a bare kill
+// leaves the terminal looking live, so the next workspace save writes it as
+// live and every later restore silently re-launches the agent — the memory
+// Stop just freed, spent again on each restore. Park is what makes Stop
+// actually free it.
+//
+// Returns false for ids it can't stop (base session, discovered worktrees
+// with no live window).
 function stopOne(id: number): boolean {
   const s = orchestratorSessions.get(id);
   if (!s || id <= 0 || s.discovered || !s.terminalId) return false;
+  // SIGTERM first so the agent can flush; the host's process-group tracker
+  // fans it out across everything the session owns. QuickJS has no
+  // `setTimeout`, so `editor.delay(ms)` is the async sleep primitive —
+  // kicked off, not awaited.
   editor.signalWindow(id, "SIGTERM");
-  // SIGKILL fallback for agents that ignore SIGTERM. The host's
-  // signalWindow is idempotent on already-exited process groups, so
-  // the second call is safe whether or not the first one took.
-  // QuickJS has no `setTimeout`; `editor.delay(ms)` is the async
-  // sleep primitive, which we kick off but don't await.
   void editor.delay(2000).then(() => {
-    editor.signalWindow(id, "SIGKILL");
+    // `parkWindow` re-sends SIGKILL (idempotent on an already-exited group)
+    // and does the terminal bookkeeping. A group that never got the
+    // SIGTERM lands here; a group that honored it is already dead and
+    // the park still settles its terminal state.
+    editor.parkWindow(id);
   });
   return true;
 }
@@ -12118,13 +12131,19 @@ editor.on("ready", () => {
 const ACTIVATION_GRACE_MS = 1500;
 
 editor.on("active_window_changed", () => {
-  const s = orchestratorSessions.get(editor.activeWindow());
+  const activeId = editor.activeWindow();
+  const s = orchestratorSessions.get(activeId);
   if (s) {
     s.activatedAt = Date.now();
     // Switching into a workspace counts as activity for the dock's recency
     // order (persisted at ms precision).
     markSessionActiveNow(s);
   }
+  // Stop OMP in the workspace we're leaving to free RAM.
+  if (previousActiveSessionId !== null && previousActiveSessionId !== activeId) {
+    stopOne(previousActiveSessionId);
+  }
+  previousActiveSessionId = activeId;
   refreshOpenDialog();
   // A passive (blurred) dock mirrors the active window, so keep its
   // highlighted row in sync when focus moves to another window from
@@ -12348,4 +12367,6 @@ editor.addMenuItem({
   checkbox: "dock",
   after: "toggle_file_explorer",
 });
+
+
 

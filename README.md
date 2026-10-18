@@ -244,7 +244,7 @@ ln -sf ~/.local/share/fresh-editor/usr/bin/fresh ~/.local/bin/fresh
 ```
 
 Ensure `~/.local/bin` is in your PATH. Available for x86_64 and aarch64 architectures.
-
+    
 ### Flatpak
 
 Download the `.flatpak` bundle from the [releases page](https://github.com/sinelaw/fresh/releases) and install:

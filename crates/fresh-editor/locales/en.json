@@ -1696,7 +1696,9 @@
   "status.terminal_restart_shell": "⟳ Restart terminal",
   "status.terminal_restart_code": "%{label} (exit %{code})",
   "terminal.tab_exited": "%{name} (exited)",
+  "terminal.tab_parked": "%{name} (parked)",
   "cli.arg.skill": "Print the guide to driving this editor from a shell. Other guides: --skill=tour, --skill=plugin"
 }
+
 
 

@@ -1583,6 +1583,7 @@ mod tests {
             "sendTerminalInput",
             "closeTerminal",
             "signalWindow",
+            "parkWindow",
             "refreshLines",
             "getCurrentLocale",
             "loadPlugin",
@@ -1615,4 +1616,5 @@ mod tests {
         );
     }
 }
+
 

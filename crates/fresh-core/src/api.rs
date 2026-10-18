@@ -5079,6 +5079,19 @@ pub enum PluginCommand {
     /// already-exited groups: callers can retry safely.
     SignalWindow { id: WindowId, signal: String },
 
+    /// Stop window `id`'s processes the way `SignalWindow` does, but record
+    /// the terminal as *parked* rather than exited: its buffer goes to
+    /// read-only scrollback, the workspace persists the terminal as dead,
+    /// and a later restore brings back the transcript with the resume offer
+    /// instead of re-running the agent.
+    ///
+    /// This is the memory-reclaiming counterpart to Stop. A plain SIGKILL
+    /// leaves the terminal looking alive, so the next restore silently
+    /// re-launches its resume argv (`omp --continue`) and the memory is
+    /// spent right back. Park is what makes stopping a session actually
+    /// free it.
+    ParkWindow { id: WindowId },
+
     /// Register a diff baseline for `buffer_id` (async). `kind` is one of
     /// "saved" | "disk" | "gitRef" | "gitIndex"; `git_ref` carries the ref
     /// for "gitRef". Disk and git baselines load their content off-loop
@@ -8464,4 +8477,5 @@ mod create_window_with_terminal_options_tests {
         assert_eq!(back.env, opts.env);
     }
 }
+
 

@@ -1696,5 +1696,6 @@
   "status.terminal_restart_shell": "⟳ เริ่มเทอร์มินัลใหม่",
   "status.terminal_restart_code": "%{label} (ออก %{code})",
   "terminal.tab_exited": "%{name} (ออกแล้ว)",
+  "terminal.tab_parked": "%{name} (พักไว้)",
   "cli.arg.skill": "พิมพ์คู่มือสำหรับควบคุมโปรแกรมแก้ไขนี้จากเชลล์ คู่มืออื่น: --skill=tour, --skill=plugin"
 }

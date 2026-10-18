@@ -4603,7 +4603,7 @@ interface EditorAPI {
 	* The child inherits the **editor's** environment, including `PATH`, so
 	* `git`, `gh` and anything else the user can run from their shell
 	* resolves by bare name — no absolute paths needed.
-	*  
+	* 
 	* `cwd` is the third argument; without it the child inherits the
 	* editor's working directory, which is not necessarily the workspace you
 	* meant.
@@ -4967,6 +4967,17 @@ interface EditorAPI {
 	* `false` only when the command channel is closed.
 	*/
 	signalWindow(id: number, signal: string): boolean;
+	/**
+	* Stop window `id`'s processes and record its terminals as parked.
+	* 
+	* Same kill as [`signal_window`](Self::signal_window) with SIGKILL,
+	* plus the bookkeeping that turns the window's terminal buffers into
+	* read-only scrollback with a resume offer — so a later workspace
+	* restore brings back the transcript instead of silently re-running
+	* the agent's resume argv. Returns `false` only when the command
+	* channel is closed.
+	*/
+	parkWindow(id: number): boolean;
 	/**
 	* Force refresh of line display
 	*/
@@ -5494,3 +5505,4 @@ interface EditorAPI {
 	*/
 	createBufferGroup(name: string, mode: string, layout: unknown): Promise<BufferGroupResult>;
 }
+
