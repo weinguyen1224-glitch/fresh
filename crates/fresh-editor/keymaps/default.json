@@ -1880,7 +1880,7 @@
       "when": "normal"
     },
     {
-      "comment": "Agent Panel — open the oh-my-pi (omp) agent in the right-side dock (mnemonic: Ctrl+, like VSCode/Zed agent panel).",
+      "comment": "Agent Panel — open the pi agent in the right-side dock (mnemonic: Ctrl+, like VSCode/Zed agent panel).",
       "key": ",",
       "modifiers": ["ctrl"],
       "action": "open_agent_panel",

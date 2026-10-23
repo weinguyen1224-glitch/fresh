@@ -6305,7 +6305,7 @@ impl Editor {
     /// `SignalWindow` alone kills the children and stops there: the
     /// buffer↔terminal binding survives, so the workspace save writes the
     /// terminal as live, and the next restore re-runs its resume argv. For
-    /// an agent that means `omp --continue` starting a whole new process —
+    /// an agent that means `pi --continue` starting a whole new process —
     /// the memory the Stop just reclaimed is spent again on every restore,
     /// which is the loop this exists to break.
     ///

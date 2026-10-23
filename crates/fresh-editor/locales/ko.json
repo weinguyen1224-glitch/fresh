@@ -1607,7 +1607,7 @@
   "cmd.open_terminal_in_dock": "Open Terminal in Utility Dock",
   "cmd.open_terminal_in_dock_desc": "Open a new terminal inside the dock",
   "cmd.open_agent_panel": "Open Agent Panel",
-  "cmd.open_agent_panel_desc": "Open the oh-my-pi (omp) agent in the right-side dock",
+  "cmd.open_agent_panel_desc": "Open the pi agent in the right-side dock",
   "cmd.workspace_trust": "워크스페이스 신뢰…",
   "cmd.workspace_trust_desc": "워크스페이스 신뢰 대화 상자를 열어 이 폴더를 신뢰, 제한 또는 차단합니다",
   "trust.now_trusted": "워크스페이스 신뢰됨 — 프로젝트 도구가 프로세스를 실행할 수 있습니다",

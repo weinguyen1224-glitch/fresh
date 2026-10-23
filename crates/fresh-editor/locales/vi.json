@@ -1607,7 +1607,7 @@
   "cmd.open_terminal_in_dock": "Open Terminal in Utility Dock",
   "cmd.open_terminal_in_dock_desc": "Open a new terminal inside the dock",
   "cmd.open_agent_panel": "Mở Agent Panel",
-  "cmd.open_agent_panel_desc": "Mở oh-my-pi (omp) agent trong dock bên phải",
+  "cmd.open_agent_panel_desc": "Mở pi agent trong dock bên phải",
   "cmd.workspace_trust": "Tin cậy không gian làm việc…",
   "cmd.workspace_trust_desc": "Mở hộp thoại tin cậy để tin cậy, hạn chế hoặc chặn thư mục này",
   "trust.now_trusted": "Không gian làm việc đã được tin cậy — các công cụ của dự án có thể chạy tiến trình",

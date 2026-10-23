@@ -272,7 +272,7 @@
   "cmd.open_terminal_in_dock": "Open Terminal in Utility Dock",
   "cmd.open_terminal_in_dock_desc": "Open a new terminal inside the shared bottom dock (creates the dock if it doesn't exist)",
   "cmd.open_agent_panel": "Open Agent Panel",
-  "cmd.open_agent_panel_desc": "Open the oh-my-pi (omp) agent in the right-side dock (creates the dock if it doesn't exist)",
+  "cmd.open_agent_panel_desc": "Open the pi agent in the right-side dock (creates the dock if it doesn't exist)",
   "cmd.workspace_trust": "Workspace Trust…",
   "cmd.workspace_trust_desc": "Open the workspace-trust dialog to trust, restrict, or block this folder",
   "explorer.loading": "Loading...",

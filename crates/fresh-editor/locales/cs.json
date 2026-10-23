@@ -1607,7 +1607,7 @@
   "cmd.open_terminal_in_dock": "Open Terminal in Utility Dock",
   "cmd.open_terminal_in_dock_desc": "Open a new terminal inside the dock",
   "cmd.open_agent_panel": "Open Agent Panel",
-  "cmd.open_agent_panel_desc": "Open the oh-my-pi (omp) agent in the right-side dock",
+  "cmd.open_agent_panel_desc": "Open the pi agent in the right-side dock",
   "cmd.workspace_trust": "Důvěra k pracovnímu prostoru…",
   "cmd.workspace_trust_desc": "Otevřít dialog důvěry k pracovnímu prostoru pro důvěru, omezení nebo blokování této složky",
   "trust.now_trusted": "Pracovní prostor je důvěryhodný — projektové nástroje mohou spouštět procesy",

@@ -568,8 +568,8 @@ pub enum Action {
     /// Open a terminal inside the Utility Dock (creates the dock if
     /// absent; otherwise swaps the active dock buffer to a terminal).
     OpenTerminalInDock,
-    /// Open the oh-my-pi (omp) agent TUI in the right-side Agent Dock
-    /// (creates the dock if absent; otherwise opens a new omp tab there).
+    /// Open the pi agent TUI in the right-side Agent Dock
+    /// (creates the dock if absent; otherwise opens a new pi tab there).
     OpenAgentPanel,
     /// Hide (close) the bottom utility dock terminal split.
     HideUtilityDock,

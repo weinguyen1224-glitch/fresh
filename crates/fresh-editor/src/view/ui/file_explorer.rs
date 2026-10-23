@@ -5,7 +5,7 @@ use crate::view::file_tree::{
     ExplorerSlotContext, ExplorerSlotResolution, ExplorerSlotResolver, FileExplorerDecorationCache,
     FileExplorerSlotOverrideCache, FileTreeView, NodeId,
 };
-use crate::view::theme::Theme;
+use crate::view::theme::{shade_toward_contrast, Theme};
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -223,6 +223,7 @@ impl FileExplorerRenderer {
         // window, so it must be set on every render regardless of `draw`.
         let viewport_height_pre = area.height.saturating_sub(2) as usize;
         view.set_viewport_height(viewport_height_pre);
+        view.apply_pending_reveal();
         if !draw {
             return None;
         }
@@ -534,10 +535,19 @@ impl FileExplorerRenderer {
         let error_text = if node.is_error() { " [Error]" } else { "" };
         let error_width = str_width(error_text);
         let total_right_width = trailing_slot_width + error_width;
+        let selection_marker = if is_selected && !is_focused {
+            Span::styled(
+                "▌",
+                Style::default().fg(shade_toward_contrast(theme.selection_bg, 70)),
+            )
+        } else {
+            Span::raw("")
+        };
 
         if indent > 0 {
             spans.push(Span::raw(" ".repeat(indent * indent_width)));
         }
+        spans.push(selection_marker);
 
         if node.is_dir() {
             let (indicator, glyph_width) = if node.is_expanded() {

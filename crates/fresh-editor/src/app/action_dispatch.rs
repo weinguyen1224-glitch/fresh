@@ -2141,10 +2141,10 @@ impl Editor {
         Ok(())
     }
 
-    /// Open the oh-my-pi (omp) agent TUI in the right-side Agent Dock,
+    /// Open the pi agent TUI in the right-side Agent Dock,
     /// creating the dock split if none exists yet. Mirrors
     /// `handle_open_terminal_in_dock` but splits at the root along the
-    /// vertical axis (full-height right column) and spawns `omp` directly
+    /// vertical axis (full-height right column) and spawns `pi` directly
     /// so every tab in the dock is an agent, never a bare shell.
     fn handle_open_agent_panel(&mut self) -> AnyhowResult<()> {
         use crate::model::event::SplitDirection;
@@ -2158,19 +2158,19 @@ impl Editor {
             .expect("active window must have a populated split layout")
             .find_leaf_by_role(SplitRole::AgentDock)
         {
-            // Existing dock — focus it and spawn a fresh omp tab there.
+            // Existing dock — focus it and spawn a fresh pi tab there.
             self.windows
                 .get_mut(&self.active_window)
                 .and_then(|w| w.split_manager_mut())
                 .expect("active window must have a populated split layout")
                 .set_active_split(dock_leaf);
-            self.open_omp_terminal();
+            self.open_pi_terminal();
             return Ok(());
         }
 
-        // No dock yet. Spawn the omp PTY first so we have a real terminal
+        // No dock yet. Spawn the pi PTY first so we have a real terminal
         // buffer to seed the new dock leaf with.
-        let Some(terminal_id) = self.spawn_omp_terminal_session() else {
+        let Some(terminal_id) = self.spawn_pi_terminal_session() else {
             return Ok(());
         };
         let buffer_id = self.create_terminal_buffer_detached(terminal_id);
@@ -2241,7 +2241,7 @@ impl Editor {
             rust_i18n::t!("terminal.opened", id = terminal_id.0, exit_key = exit_key).to_string(),
         );
         tracing::info!(
-            "Opened omp {:?} into new agent dock leaf {:?} (buffer {:?})",
+            "Opened pi {:?} into new agent dock leaf {:?} (buffer {:?})",
             terminal_id,
             new_leaf,
             buffer_id
@@ -2249,34 +2249,57 @@ impl Editor {
         Ok(())
     }
 
-    /// Spawn an `omp` PTY session in the active window (command override
-    /// `omp`), used to seed the Agent Dock leaf.
-    fn spawn_omp_terminal_session(&mut self) -> Option<crate::services::terminal::TerminalId> {
+    /// Resolve the `pi` binary to an absolute path. The editor's inherited
+    /// PATH often lacks `~/.pi/agent/bin` (GUI/desktop launches), so fall back
+    /// to the default install location instead of failing to spawn.
+    fn resolve_pi_binary() -> Option<String> {
+        if let Ok(found) = which::which("pi") {
+            return Some(found.to_string_lossy().into_owned());
+        }
+        let candidate = dirs::home_dir()?
+            .join(".pi")
+            .join("agent")
+            .join("bin")
+            .join("pi");
+        candidate
+            .is_file()
+            .then(|| candidate.to_string_lossy().into_owned())
+    }
+
+    /// Spawn a `pi` PTY session in the active window (command override
+    /// `pi`), used to seed the Agent Dock leaf.
+    fn spawn_pi_terminal_session(&mut self) -> Option<crate::services::terminal::TerminalId> {
+        let Some(bin) = Self::resolve_pi_binary() else {
+            self.set_status_message(
+                "Agent Dock: `pi` not found — install pi or add it to PATH".to_string(),
+            );
+            return None;
+        };
         let window = self.active_window_mut();
         let terminal_id = window.spawn_terminal_session(
             None,
             true,
-            Some(vec!["omp".to_string()]),
+            Some(vec![bin.clone()]),
             std::collections::HashMap::new(),
         )?;
-        // Record the launch command so workspace capture persists the omp
+        // Record the launch command so workspace capture persists the pi
         // session (with its command) and a later launch re-runs it, instead
         // of the dock coming back as a blank shell pane.
-        // Record the launch command (fresh omp) plus a resume argv that
+        // Record the resolved absolute path (fresh pi) plus a resume argv that
         // rejoins the previous session on restore, so the dock comes back
         // focused into the same conversation instead of a blank shell.
         window.mark_terminal_restorable(
             terminal_id,
-            Some(vec!["omp".to_string()]),
-            Some(vec!["omp".to_string(), "--continue".to_string()]),
+            Some(vec![bin.clone()]),
+            Some(vec![bin, "--continue".to_string()]),
         );
         Some(terminal_id)
     }
 
-    /// Open a fresh `omp` terminal tab in the active split (the Agent Dock
+    /// Open a fresh `pi` terminal tab in the active split (the Agent Dock
     /// leaf, already focused by the caller).
-    fn open_omp_terminal(&mut self) {
-        let Some(terminal_id) = self.spawn_omp_terminal_session() else {
+    fn open_pi_terminal(&mut self) {
+        let Some(terminal_id) = self.spawn_pi_terminal_session() else {
             return;
         };
         let split_id = self

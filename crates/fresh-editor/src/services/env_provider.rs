@@ -80,6 +80,15 @@ impl EnvDelta {
     }
 }
 
+
+/// The `$SHELL` family a capture script is written for. Only the env dump and
+/// sentinel spelling differ: Nushell rejects `command env` and prints its path
+/// list as a JSON array rather than a `:`-joined string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShellKind {
+    Posix,
+    Nushell,
+}
 /// Shared, live environment recipe.
 pub struct EnvProvider {
     state: RwLock<State>,
@@ -223,7 +232,7 @@ impl EnvProvider {
         let Some(stdout) = run(script).await else {
             return Vec::new();
         };
-        let vars = parse_env(&stdout);
+        let vars = parse_env(&stdout, ShellKind::Posix);
 
         if let Ok(mut s) = self.state.write() {
             s.cache = Some(Cached {
@@ -246,7 +255,7 @@ impl EnvProvider {
     /// terminal opens with unchanged env inputs run no subprocess. Empty when
     /// inactive or on failure — the caller degrades to the inherited env.
     pub fn current_local_delta_blocking(&self) -> EnvDelta {
-        self.capture_delta_blocking(|script| {
+        self.capture_delta_blocking(|script, _kind| {
             let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
             let output = std::process::Command::new(&shell)
                 .arg("-lc")
@@ -263,7 +272,10 @@ impl EnvProvider {
     /// baseline+activated capture script) and cache the diff. `run` MUST be a
     /// raw spawn that does not apply this provider's env, or capture would
     /// recurse.
-    fn capture_delta_blocking(&self, run: impl FnOnce(String) -> Option<String>) -> EnvDelta {
+    fn capture_delta_blocking(
+        &self,
+        run: impl FnOnce(String, ShellKind) -> Option<String>,
+    ) -> EnvDelta {
         let (snippet, dir) = match self.state.read() {
             Ok(s) => (s.snippet.clone(), s.dir.clone()),
             Err(_) => return EnvDelta::default(),
@@ -281,11 +293,13 @@ impl EnvProvider {
             }
         }
 
-        let script = build_delta_capture_script(&snippet, dir.as_deref());
-        let Some(stdout) = run(script) else {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+        let kind = shell_kind(&shell);
+        let script = build_delta_capture_script(&snippet, dir.as_deref(), kind);
+        let Some(stdout) = run(script, kind) else {
             return EnvDelta::default();
         };
-        let delta = parse_delta(&stdout);
+        let delta = parse_delta(&stdout, kind);
 
         if let Ok(mut s) = self.state.write() {
             s.delta_cache = Some(CachedDelta {
@@ -325,44 +339,95 @@ fn build_capture_script(snippet: &str, dir: Option<&Path>) -> String {
 /// can split on the identical marker when it captures the delta on the remote.
 pub(crate) const DELTA_SENTINEL: &str = "__FRESH_ENV_DELTA_SENTINEL_b3f1c2__";
 
+/// Nushell's env dump. Two Nushell constraints shape it: `$env | to json`
+/// refuses to serialize closures, so the table is filtered to scalar entries and
+/// transposed into `[{key, value}]`; and an expression spliced into a multi-line
+/// `-c` script loses its value unless wrapped in a `def` body. Both together
+/// give a `dumpenv` command whose call prints JSON that
+/// [`parse_nushell_env`] reads back.
+const NUSHELL_DUMP_DEF: &str = r#"def --env dumpenv [] { $env | transpose key value | where {|r| ($r.value | describe) in ["string" "int" "float" "bool" "list<string>"]} | to json }"#;
+const NUSHELL_ENV_DUMP: &str = "print (dumpenv)";
+
 /// Build the script for a *delta* capture: dump the env once (baseline — login
 /// shell in the project dir, recipe not yet run), print the sentinel, run the
 /// recipe, then dump the env again (activated). Diffing the two halves yields
 /// exactly what the recipe changed — see [`parse_delta`]. The `cd` precedes the
 /// baseline dump so direnv (which keys off cwd) is still inactive in the
 /// baseline and only activates in the second half.
-fn build_delta_capture_script(snippet: &str, dir: Option<&Path>) -> String {
+///
+/// The dump is kept POSIX for every bash-compatible shell but spelled per
+/// family, because the recipe runs in whatever `$SHELL` names: Nushell has no
+/// `command` builtin and aborts the whole script on it, while bash/fish/zsh do.
+///
+/// `PATH` goes first so it reaches the child before any other override
+/// (issue #2355), and the activated half validates the capture — a missing
+/// trailing sentinel means the script aborted midway and [`parse_delta`]
+/// returns an empty delta instead of a half-applied environment.
+fn build_delta_capture_script(
+    snippet: &str,
+    dir: Option<&Path>,
+    shell: ShellKind,
+) -> String {
+    let (dump, sentinel) = match shell {
+        ShellKind::Nushell => (NUSHELL_ENV_DUMP, "print "),
+        ShellKind::Posix => ("command env", "printf '%s\\n' "),
+    };
+    let sentinel_print = format!("{sentinel}{}", shell_quote(DELTA_SENTINEL));
+
     let mut script = String::new();
+    if shell == ShellKind::Nushell {
+        script.push_str(NUSHELL_DUMP_DEF);
+        script.push_str("; ");
+    }
     if let Some(d) = dir {
         script.push_str("cd ");
         script.push_str(&shell_quote(&d.to_string_lossy()));
         script.push_str("; ");
     }
-    script.push_str("command env; printf '%s\\n' ");
-    script.push_str(&shell_quote(DELTA_SENTINEL));
+    script.push_str(dump);
+    script.push_str("; ");
+    script.push_str(&sentinel_print);
     script.push_str("; ");
     let snippet = snippet.trim();
     if !snippet.is_empty() {
         script.push_str(snippet);
         script.push_str("; ");
     }
-    script.push_str("command env");
+    script.push_str(dump);
+    script.push_str("; ");
+    script.push_str(&sentinel_print);
     script
 }
 
+fn shell_kind(shell: &str) -> ShellKind {
+    let name = Path::new(shell)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if name.starts_with("nu") {
+        ShellKind::Nushell
+    } else {
+        ShellKind::Posix
+    }
+}
 /// Diff a delta-capture's output into an [`EnvDelta`]. Splits on
 /// [`DELTA_SENTINEL`] into baseline and activated halves; a key whose value is
-/// new or changed in the activated half is a `set` (in activated order), and a
+/// new or changed in the activated half is a `set` (in order of the dump), and a
 /// key present in the baseline but gone from the activated half is an `unset`.
+/// `PATH` is hoisted to the front of `set` no matter which shell produced the
+/// dump, since anything else the capture forwards is useless without it.
 /// Volatile keys identical in both halves (`PWD`, `SHLVL`, …) diff out and never
-/// appear. If the sentinel is missing (capture malformed), returns an empty
-/// delta rather than guessing.
-fn parse_delta(stdout: &str) -> EnvDelta {
+/// appear. If the trailing sentinel is missing — the recipe aborted the script,
+/// or the capture is malformed — returns an empty delta rather than guessing.
+fn parse_delta(stdout: &str, kind: ShellKind) -> EnvDelta {
     let Some((baseline_text, activated_text)) = stdout.split_once(DELTA_SENTINEL) else {
         return EnvDelta::default();
     };
-    let baseline = parse_env(baseline_text);
-    let activated = parse_env(activated_text);
+    if !activated_text.contains(DELTA_SENTINEL) {
+        return EnvDelta::default();
+    }
+    let baseline = parse_env(baseline_text, kind);
+    let activated = parse_env(activated_text, kind);
 
     let baseline_lookup: std::collections::HashMap<&str, &str> = baseline
         .iter()
@@ -374,6 +439,10 @@ fn parse_delta(stdout: &str) -> EnvDelta {
         if baseline_lookup.get(k.as_str()) != Some(&v.as_str()) {
             set.push((k.clone(), v.clone()));
         }
+    }
+    if let Some(i) = set.iter().position(|(k, _)| k == "PATH") {
+        let path = set.remove(i);
+        set.insert(0, path);
     }
 
     let activated_keys: std::collections::HashSet<&str> =
@@ -387,10 +456,22 @@ fn parse_delta(stdout: &str) -> EnvDelta {
     EnvDelta { set, unset }
 }
 
-/// Parse `env` output (`KEY=VALUE` lines) into pairs. Lines without `=` or with
-/// an empty key are skipped. A value may itself contain `=`; only the first is
-/// the separator. (Values with embedded newlines — rare — are not handled.)
-fn parse_env(stdout: &str) -> Vec<(String, String)> {
+/// Parse an implemented half's dump into pairs.
+///
+/// POSIX is `env` output (`KEY=VALUE` lines): lines without `=` or with an empty
+/// key are skipped, and a value may itself contain `=` since only the first
+/// splits. Nushell prints `echo ($env | to json)` — a JSON object — because its
+/// `PATH` is a list, which `env` format cannot represent without joining on `:`;
+/// array values are joined on [`std::path::MAIN_SEPARATOR`]-independent `:` to
+/// match what a POSIX shell would export.
+fn parse_env(stdout: &str, kind: ShellKind) -> Vec<(String, String)> {
+    match kind {
+        ShellKind::Posix => parse_posix_env(stdout),
+        ShellKind::Nushell => parse_nushell_env(stdout),
+    }
+}
+
+fn parse_posix_env(stdout: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for line in stdout.lines() {
         if let Some(eq) = line.find('=') {
@@ -401,6 +482,40 @@ fn parse_env(stdout: &str) -> Vec<(String, String)> {
         }
     }
     out
+}
+
+fn parse_nushell_env(stdout: &str) -> Vec<(String, String)> {
+    let start = stdout.find('[').unwrap_or(stdout.len());
+    let Some(value) = serde_json::from_str::<serde_json::Value>(&stdout[start..])
+        .ok()
+        .filter(|v| v.is_array())
+    else {
+        return Vec::new();
+    };
+    let rows = value.as_array().map(Vec::as_slice).unwrap_or(&[]);
+    rows.iter()
+        .filter_map(|row| {
+            let key = row.get("key")?.as_str()?;
+            let value = scalar_env_value(row.get("value")?)?;
+            Some((key.to_string(), value))
+        })
+        .collect()
+}
+
+fn scalar_env_value(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(s) => Some(s.clone()),
+        serde_json::Value::Array(items) => Some(
+            items
+                .iter()
+                .filter_map(|i| i.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+                .join(if cfg!(windows) { ";" } else { ":" }),
+        ),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Null | serde_json::Value::Object(_) => None,
+    }
 }
 
 /// POSIX single-quote escaping for splicing a path into a shell command.
@@ -553,20 +668,46 @@ mod tests {
 
     #[test]
     fn build_delta_capture_script_shape() {
-        let s = build_delta_capture_script("source .venv/bin/activate", Some(Path::new("/p")));
+        let s = build_delta_capture_script(
+            "source .venv/bin/activate",
+            Some(Path::new("/p")),
+            ShellKind::Posix,
+        );
         assert_eq!(
             s,
             format!(
                 "cd '/p'; command env; printf '%s\\n' '{DELTA_SENTINEL}'; \
-                 source .venv/bin/activate; command env"
+                 source .venv/bin/activate; command env; printf '%s\\n' '{DELTA_SENTINEL}'"
             )
         );
     }
 
     #[test]
+    fn build_delta_capture_script_uses_nushell_syntax() {
+        let s = build_delta_capture_script("direnv hook nu", None, ShellKind::Nushell);
+        assert_eq!(
+            s,
+            format!(
+                "{NUSHELL_DUMP_DEF}; {NUSHELL_ENV_DUMP}; print '{DELTA_SENTINEL}'; \
+                 direnv hook nu; {NUSHELL_ENV_DUMP}; print '{DELTA_SENTINEL}'"
+            )
+        );
+        assert!(!s.contains("command env"));
+        assert!(s.contains("transpose key value"));
+    }
+
+    #[test]
+    fn shell_kind_detects_nushell_by_binary_name() {
+        assert_eq!(shell_kind("/usr/bin/nu"), ShellKind::Nushell);
+        assert_eq!(shell_kind("/usr/local/bin/nushell"), ShellKind::Nushell);
+        assert_eq!(shell_kind("/usr/bin/fish"), ShellKind::Posix);
+        assert_eq!(shell_kind("/bin/sh"), ShellKind::Posix);
+    }
+
+    #[test]
     fn parse_env_basics() {
         let out = "PATH=/a:/b\nVIRTUAL_ENV=/p/.venv\nWEIRD=a=b=c\n=skipme\nnoeq\n";
-        let vars = parse_env(out);
+        let vars = parse_env(out, ShellKind::Posix);
         assert_eq!(
             vars,
             vec![
@@ -643,7 +784,7 @@ mod tests {
 
     /// Build a delta-capture stdout from a baseline and an activated env block.
     fn delta_output(baseline: &str, activated: &str) -> String {
-        format!("{baseline}\n{DELTA_SENTINEL}\n{activated}")
+        format!("{baseline}\n{DELTA_SENTINEL}\n{activated}\n{DELTA_SENTINEL}\n")
     }
 
     #[test]
@@ -654,7 +795,7 @@ mod tests {
             "HOME=/h\nPATH=/usr/bin\nGONE=1\nSHLVL=3",
             "HOME=/h\nPATH=/p/.venv/bin:/usr/bin\nVIRTUAL_ENV=/p/.venv\nSHLVL=3",
         );
-        let d = parse_delta(&out);
+        let d = parse_delta(&out, ShellKind::Posix);
         assert_eq!(
             d.set,
             vec![
@@ -667,14 +808,14 @@ mod tests {
 
     #[test]
     fn parse_delta_missing_sentinel_is_empty() {
-        assert!(parse_delta("HOME=/h\nPATH=/usr/bin").is_empty());
+        assert!(parse_delta("HOME=/h\nPATH=/usr/bin", ShellKind::Posix).is_empty());
     }
 
     #[test]
     fn delta_capture_inactive_returns_empty_without_running() {
         let p = EnvProvider::inactive();
         let ran = std::cell::Cell::new(false);
-        let d = p.capture_delta_blocking(|_script| {
+        let d = p.capture_delta_blocking(|_script, _kind| {
             ran.set(true);
             Some(delta_output("A=1", "A=1\nB=2"))
         });
@@ -694,10 +835,10 @@ mod tests {
             Some(delta_output("PATH=/usr/bin", "PATH=/usr/bin\nFOO=bar"))
         };
 
-        let d1 = p.capture_delta_blocking(|_s| run());
+        let d1 = p.capture_delta_blocking(|_s, _k| run());
         assert_eq!(d1.set, vec![("FOO".into(), "bar".into())]);
         // Second call hits the cache — no re-run.
-        let d2 = p.capture_delta_blocking(|_s| run());
+        let d2 = p.capture_delta_blocking(|_s, _k| run());
         assert_eq!(d2, d1);
         assert_eq!(calls.get(), 1, "warm cache should prevent a second capture");
     }

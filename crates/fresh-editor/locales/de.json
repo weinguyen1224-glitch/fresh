@@ -1607,7 +1607,7 @@
   "cmd.open_terminal_in_dock": "Open Terminal in Utility Dock",
   "cmd.open_terminal_in_dock_desc": "Open a new terminal inside the dock",
   "cmd.open_agent_panel": "Open Agent Panel",
-  "cmd.open_agent_panel_desc": "Open the oh-my-pi (omp) agent in the right-side dock",
+  "cmd.open_agent_panel_desc": "Open the pi agent in the right-side dock",
   "cmd.workspace_trust": "Arbeitsbereich-Vertrauen…",
   "cmd.workspace_trust_desc": "Den Dialog für Arbeitsbereich-Vertrauen öffnen, um diesem Ordner zu vertrauen, ihn einzuschränken oder zu blockieren",
   "trust.now_trusted": "Arbeitsbereich vertrauenswürdig — Projektwerkzeuge dürfen Prozesse ausführen",

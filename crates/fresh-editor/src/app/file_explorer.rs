@@ -1449,6 +1449,18 @@ impl Editor {
                 path: path.to_path_buf(),
             },
         );
+
+        let cwd = self.working_dir().to_path_buf();
+        let relative = path.strip_prefix(&cwd).ok().map(|p| p.to_string_lossy().replace('\\', "/"));
+        let Some(relative) = relative else {
+            return;
+        };
+        if path.exists() {
+            self.quick_open_registry.add_file_path(&cwd.to_string_lossy(), &relative);
+        } else {
+            self.quick_open_registry
+                .invalidate_file_cache(&cwd.to_string_lossy());
+        }
     }
 
     pub fn perform_file_explorer_paste(&mut self, src: PathBuf, dst: PathBuf, is_cut: bool) {
@@ -1792,7 +1804,7 @@ impl crate::app::window::Window {
     /// Install an async expand-to-path result onto *this* window (routed
     /// per-window for the same reason as `install_initialized_file_explorer`).
     pub(crate) fn install_expanded_file_explorer(&mut self, mut view: FileTreeView) {
-        view.update_scroll_for_selection();
+        view.scroll_selection_near_top();
         // A replay that would land exactly where this expand already did is
         // pure churn — and not free churn: replaying hands the tree straight
         // back out, so `self.file_explorer` returns to `None` and the sidebar

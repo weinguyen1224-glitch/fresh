@@ -1290,7 +1290,7 @@ impl Editor {
         // closed the handle on the wrong window's manager. The dead
         // terminal stayed bound, so the next workspace save wrote it as
         // still-live and the next restore re-spawned its agent resume
-        // argv (`omp --continue`) — a new agent process per restore.
+        // argv (`pi --continue`) — a new agent process per restore.
         // If the window is already gone, there is nothing to tear down;
         // only the plugin hook below still matters.
         if !self.windows.contains_key(&exited_window_id) {

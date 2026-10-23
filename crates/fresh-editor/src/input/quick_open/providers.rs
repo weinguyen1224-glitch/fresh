@@ -442,6 +442,43 @@ impl FileProvider {
             // Keep c.loading = true — the walk is still in progress.
         }
     }
+    /// Insert `path` (relative to `cwd`) into the cached list when the cache
+    /// holds that cwd. Newly created files and directories never show up in
+    /// quick-open until the editor restarts otherwise, because the scan
+    /// cache is only invalidated on cwd/backend changes.
+    pub fn add_path(&self, cwd: &str, path: &str) {
+        if let Ok(mut c) = self.cache.lock() {
+            if c.loaded_cwd.as_deref() != Some(cwd) {
+                return;
+            }
+            let Some(files) = c.files.as_mut() else {
+                return;
+            };
+            let entries = std::sync::Arc::make_mut(files);
+            if entries.iter().any(|e| e.relative_path == path) {
+                return;
+            }
+            entries.push(FileEntry {
+                frecency_score: self.get_frecency_score(path),
+                relative_path: path.to_string(),
+            });
+        }
+    }
+
+    /// Drop the cached (or in-progress) scan so the next quick-open rescans
+    /// the tree. Used after a removal, which the cache cannot patch in place.
+    pub fn invalidate(&self, cwd: &str) {
+        if let Ok(mut c) = self.cache.lock() {
+            if c.loaded_cwd.as_deref() != Some(cwd) {
+                return;
+            }
+            self.cancel
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            c.files = None;
+            c.loading = false;
+            c.loaded_cwd = None;
+        }
+    }
 
     /// Returns `true` if a background file scan is in progress.
     fn is_loading(&self) -> bool {
@@ -1406,6 +1443,32 @@ mod tests {
         assert!(paths.contains(&"src/foo.rs"));
     }
 
+
+    #[test]
+    fn add_path_and_invalidate_keep_cache_in_step_with_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().display().to_string();
+        std::fs::write(dir.path().join("main.rs"), b"").unwrap();
+
+        let provider = make_file_provider();
+        let context = make_test_context(&base);
+        assert_eq!(provider.suggestions("", &context).len(), 1);
+
+        std::fs::create_dir(dir.path().join("new_dir")).unwrap();
+        std::fs::write(dir.path().join("new_dir").join("created.ts"), b"").unwrap();
+        provider.add_path(&base, "new_dir/created.ts");
+        let paths: Vec<String> = provider
+            .suggestions("", &context)
+            .iter()
+            .filter_map(|s| s.value.clone())
+            .collect();
+        assert!(paths.contains(&"new_dir/created.ts".to_string()));
+        assert_eq!(paths.len(), 2);
+
+        provider.invalidate(&base);
+        std::fs::remove_dir_all(dir.path().join("new_dir")).unwrap();
+        assert_eq!(provider.suggestions("", &context).len(), 1);
+    }
     #[test]
     fn test_file_provider_skips_ignored_dirs() {
         let dir = tempfile::tempdir().unwrap();
@@ -1633,7 +1696,7 @@ mod tests {
 
     #[test]
     fn test_empty_query_ranks_most_recent_first() {
-        let provider = FileProvider::new();
+        let provider = make_file_provider();
         // Two files, each opened once -> equal frecency score.
         provider.record_access("a.rs");
         provider.record_access("b.rs");
@@ -1648,9 +1711,6 @@ mod tests {
         assert_eq!(sugg[0].value.as_deref(), Some("b.rs"), "most recent must rank first");
         assert_eq!(sugg[1].value.as_deref(), Some("a.rs"));
     }
-
     }
 }
-
-
 

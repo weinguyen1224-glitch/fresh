@@ -3209,7 +3209,7 @@ impl Editor {
 
         // Deliberately NOT materializing here. A preview is a hover/overlay
         // glance, not a dive: restoring the workspace would spawn its saved
-        // terminals, and an agent terminal's resume argv (`omp --continue`)
+        // terminals, and an agent terminal's resume argv (`pi --continue`)
         // would launch a whole new agent process just because the user
         // hovered the dock. An unmaterialized window paints its empty seed
         // (see `build_fresh_layout_if_needed`); the dive path

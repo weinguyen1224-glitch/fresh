@@ -5473,7 +5473,7 @@ registerHandler("orchestrator_dock_toggle", toggleDock);
 // save that records the terminal as dead. The session record stays put:
 // Stop only reclaims the agent's memory, it doesn't touch the worktree or
 // the editor session. Diving back in re-runs the agent's resume argv
-// (`omp --continue`), so the conversation is one click away.
+// (`pi --continue`), so the conversation is one click away.
 //
 // Park rather than plain `signalWindow` is the whole point: a bare kill
 // leaves the terminal looking live, so the next workspace save writes it as

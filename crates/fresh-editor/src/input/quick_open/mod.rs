@@ -280,6 +280,24 @@ impl QuickOpenRegistry {
         }
     }
 
+    pub fn add_file_path(&self, cwd: &str, path: &str) {
+        for provider in self.providers.values() {
+            if let Some(fp) = provider.as_any().downcast_ref::<FileProvider>() {
+                fp.add_path(cwd, path);
+                return;
+            }
+        }
+    }
+
+    pub fn invalidate_file_cache(&self, cwd: &str) {
+        for provider in self.providers.values() {
+            if let Some(fp) = provider.as_any().downcast_ref::<FileProvider>() {
+                fp.invalidate(cwd);
+                return;
+            }
+        }
+    }
+
 
     /// Get the provider for a given input
     ///

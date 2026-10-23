@@ -1607,7 +1607,7 @@
   "cmd.open_terminal_in_dock": "Open Terminal in Utility Dock",
   "cmd.open_terminal_in_dock_desc": "Open a new terminal inside the dock",
   "cmd.open_agent_panel": "Open Agent Panel",
-  "cmd.open_agent_panel_desc": "Open the oh-my-pi (omp) agent in the right-side dock",
+  "cmd.open_agent_panel_desc": "Open the pi agent in the right-side dock",
   "cmd.workspace_trust": "工作区信任…",
   "cmd.workspace_trust_desc": "打开工作区信任对话框，以信任、限制或阻止此文件夹",
   "trust.now_trusted": "工作区已信任 — 项目工具可以运行进程",

@@ -35,6 +35,10 @@ pub struct FileTreeView {
     /// Render single-child directory chains as a single row
     /// (`foo/bar/baz`). Mirrors VSCode's `explorer.compactFolders`.
     compact_directories: bool,
+    /// The selection was revealed before the real viewport height was known,
+    /// so it sits at whatever offset the default guessed. Re-anchored on the
+    /// next render.
+    pending_reveal: bool,
 }
 
 /// Sort mode for file tree entries
@@ -63,6 +67,7 @@ impl FileTreeView {
             viewport_height: 10, // Default, will be updated during rendering
             search: FileExplorerSearch::new(),
             compact_directories: true,
+            pending_reveal: false,
         }
     }
 
@@ -259,9 +264,12 @@ impl FileTreeView {
         }
     }
 
-    /// Set the viewport height (should be called during rendering)
+    /// Set the viewport height (should be called during rendering). A reveal
+    /// requested before the first measurement is anchored here rather than
+    /// against the placeholder height.
     pub fn set_viewport_height(&mut self, height: usize) {
         self.viewport_height = height;
+        self.apply_pending_reveal();
     }
 
     /// Get the underlying tree
@@ -531,6 +539,46 @@ impl FileTreeView {
         }
         let visible = self.filtered_visible_nodes();
         self.update_scroll_with_nodes(&visible);
+    }
+
+    /// Place the selection near the top of the viewport instead of merely
+    /// scrolling it into view. Follow-the-active-file uses this so the target
+    /// row lands where the eye already is, rather than pinned to the bottom
+    /// edge (or hidden under the sticky ancestor rows).
+    pub fn scroll_selection_near_top(&mut self) {
+        self.pending_reveal = true;
+        self.apply_pending_reveal();
+    }
+
+    /// Re-run the last [`Self::scroll_selection_near_top`] once the real
+    /// viewport height is known. Called from render, because a reveal lands
+    /// before the next frame has measured the sidebar and would otherwise
+    /// anchor against the placeholder height.
+    pub fn apply_pending_reveal(&mut self) {
+        if !self.pending_reveal || self.viewport_height == 0 {
+            return;
+        }
+        let visible = self.filtered_visible_nodes();
+        let Some(selected) = self.selected_node else {
+            return;
+        };
+        let Some(pos) = visible.iter().position(|&id| id == selected) else {
+            return;
+        };
+        let desired_row = self.viewport_height / 4;
+        let mut offset = pos;
+        loop {
+            let sticky = self
+                .sticky_indices(&visible, offset, self.viewport_height)
+                .len();
+            let next = pos.saturating_sub(desired_row.saturating_sub(sticky));
+            if next == offset {
+                break;
+            }
+            offset = next;
+        }
+        self.scroll_offset = offset;
+        self.pending_reveal = false;
     }
 
     fn update_scroll_with_nodes(&mut self, visible: &[NodeId]) {
@@ -1213,6 +1261,56 @@ mod tests {
 
         // Scroll offset should be 0
         assert_eq!(view.get_scroll_offset(), 0);
+    }
+
+    #[tokio::test]
+    async fn scroll_selection_near_top_keeps_target_above_the_folded_rows() {
+        let (_temp_dir, mut view) = create_test_view().await;
+        let root_id = view.tree().root_id();
+        view.tree_mut().expand_node(root_id).await.unwrap();
+        view.set_viewport_height(4);
+        view.select_last();
+        let selected_index = view.get_selected_index().unwrap();
+        view.update_scroll_for_selection();
+        let pinned_to_bottom = view.get_scroll_offset();
+        assert_ne!(pinned_to_bottom, selected_index);
+
+        view.scroll_selection_near_top();
+        let rows = view.viewport_display_indices();
+        let row = rows
+            .iter()
+            .position(|&idx| idx == selected_index)
+            .expect("selection must be on screen");
+        assert_eq!(row, 1);
+    }
+
+    #[tokio::test]
+    async fn reveal_before_measure_anchors_once_the_viewport_is_known() {
+        let (_temp_dir, mut view) = create_test_view().await;
+        let root_id = view.tree().root_id();
+        view.tree_mut().expand_node(root_id).await.unwrap();
+        let target = view
+            .get_display_nodes()
+            .into_iter()
+            .find(|(_, depth)| *depth > 0)
+            .map(|(id, _)| id)
+            .expect("fixture has nested entries");
+        view.select_last();
+        view.set_selected(Some(target));
+
+        view.scroll_selection_near_top();
+
+        view.set_viewport_height(3);
+        view.apply_pending_reveal();
+
+        let selected_index = view.get_selected_index().unwrap();
+        let rows = view.viewport_display_indices();
+        let row = rows
+            .iter()
+            .position(|&idx| idx == selected_index)
+            .expect("selection must be on screen");
+        assert!(row <= 1);
+
     }
 
     #[tokio::test]

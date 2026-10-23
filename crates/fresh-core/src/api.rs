@@ -5087,7 +5087,7 @@ pub enum PluginCommand {
     ///
     /// This is the memory-reclaiming counterpart to Stop. A plain SIGKILL
     /// leaves the terminal looking alive, so the next restore silently
-    /// re-launches its resume argv (`omp --continue`) and the memory is
+    /// re-launches its resume argv (`pi --continue`) and the memory is
     /// spent right back. Park is what makes stopping a session actually
     /// free it.
     ParkWindow { id: WindowId },

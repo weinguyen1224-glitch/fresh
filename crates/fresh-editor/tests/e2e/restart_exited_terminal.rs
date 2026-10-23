@@ -540,7 +540,7 @@ fn test_terminal_tab_title_survives_an_editor_restart() {
 /// This is the memory loop the Orchestrator's Stop used to leak. Stop killed
 /// the process group with a bare `signalWindow`, which left the terminal
 /// buffer bound to a dead PTY: the workspace saved it as a *live* terminal,
-/// so every later restore re-ran its agent-resume argv (`omp --continue`) and
+/// so every later restore re-ran its agent-resume argv (`pi --continue`) and
 /// started a whole new agent process. Stopping a session therefore cost the
 /// same memory it was supposed to free, over and over.
 ///
